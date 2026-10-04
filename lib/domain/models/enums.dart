@@ -72,3 +72,23 @@ enum ThemePref {
         orElse: () => ThemePref.system,
       );
 }
+
+/// 生命周期状态：想买 → 待购 → 使用中 ⇄ 闲置 → 已售/丢弃。
+enum ItemLifecycle {
+  want('想买'),
+  pending('待购'),
+  inUse('使用中'),
+  idle('闲置'),
+  sold('已售'),
+  discarded('丢弃');
+
+  const ItemLifecycle(this.labelZh);
+
+  final String labelZh;
+
+  /// 是否属于待购清单（购物决策）。
+  bool get isWishlist => this == want || this == pending;
+
+  static ItemLifecycle fromDb(String? value) =>
+      ItemLifecycle.values.asNameMap()[value] ?? ItemLifecycle.inUse;
+}

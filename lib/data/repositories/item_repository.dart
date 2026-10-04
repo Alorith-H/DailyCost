@@ -56,6 +56,8 @@ class ItemRepository {
               tags: item.tags,
               photos: item.photos,
               extraCosts: const [],
+              lifecycle: item.lifecycle,
+              cooldownUntil: item.cooldownUntil,
             ),
             createdAt: item.createdAt,
             updatedAt: now,
@@ -231,6 +233,9 @@ class ItemRepository {
     'depreciation': d.depreciation.name,
     'note': d.note,
     'photos': jsonEncode(d.photos),
+    'lifecycle': d.lifecycle.name,
+    'cooldown_until':
+        d.cooldownUntil == null ? null : _dateToDb(d.cooldownUntil!),
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
     'deleted_at': null,
@@ -267,6 +272,10 @@ class ItemRepository {
     photos: (jsonDecode(r['photos'] as String? ?? '[]') as List<dynamic>)
         .cast<String>(),
     extraCosts: costs,
+    lifecycle: ItemLifecycle.fromDb(r['lifecycle'] as String?),
+    cooldownUntil: r['cooldown_until'] == null
+        ? null
+        : _dateFromDb(r['cooldown_until'] as String),
     createdAt: DateTime.parse(r['created_at'] as String),
     updatedAt: DateTime.parse(r['updated_at'] as String),
     deletedAt: r['deleted_at'] == null ? null : DateTime.parse(r['deleted_at'] as String),

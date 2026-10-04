@@ -52,6 +52,11 @@ class _HomePageState extends ConsumerState<HomePage>
         title: const Text('每日花费'),
         actions: [
           IconButton(
+            tooltip: '购物决策',
+            icon: const Icon(Icons.shopping_cart_outlined),
+            onPressed: () => context.pushNamed('decisions'),
+          ),
+          IconButton(
             tooltip: '分析',
             icon: const Icon(Icons.insights_outlined),
             onPressed: () => context.pushNamed('analysis'),
@@ -81,7 +86,8 @@ class _HomePageState extends ConsumerState<HomePage>
       body: itemsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('加载失败：$e')),
-        data: (items) {
+        data: (all) {
+          final items = ref.watch(activeItemsProvider);
           if (items.isEmpty) {
             return EmptyHome(onAdd: _onAdd);
           }
@@ -103,6 +109,7 @@ class _HomePageState extends ConsumerState<HomePage>
                   result: results[item.id]!,
                   onTap: () => _onEdit(item),
                   onDelete: () => _onDelete(item),
+                  onCheckIn: () => _onCheckIn(item),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -117,6 +124,19 @@ class _HomePageState extends ConsumerState<HomePage>
 
   void _onEdit(Item item) =>
       context.pushNamed('itemEdit', pathParameters: {'id': '${item.id}'});
+
+  Future<void> _onCheckIn(Item item) async {
+    final isNew = await ref
+        .read(checkinRepositoryProvider)
+        .checkIn(item.id, DateTime.now());
+    ref.invalidate(checkinInfoProvider);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isNew ? '已打卡「${item.name}」' : '今天已经打过卡了'),
+      ),
+    );
+  }
 
   Future<void> _onDelete(Item item) async {
     await ref.read(itemsProvider.notifier).softDelete(item.id);

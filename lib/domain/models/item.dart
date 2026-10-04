@@ -28,6 +28,8 @@ class Item {
     required this.tags,
     this.photos = const [],
     this.extraCosts = const [],
+    this.lifecycle = ItemLifecycle.inUse,
+    this.cooldownUntil,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -67,6 +69,12 @@ class Item {
 
   /// TCO 附加成本
   final List<ItemCost> extraCosts;
+
+  /// 生命周期状态
+  final ItemLifecycle lifecycle;
+
+  /// 冷静期截止（待购清单）
+  final DateTime? cooldownUntil;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -128,6 +136,8 @@ class Item {
     List<String>? tags,
     List<String>? photos,
     List<ItemCost>? extraCosts,
+    ItemLifecycle? lifecycle,
+    Object? cooldownUntil = _unset,
     DateTime? createdAt,
     DateTime? updatedAt,
     Object? deletedAt = _unset,
@@ -161,6 +171,10 @@ class Item {
     tags: tags ?? this.tags,
     photos: photos ?? this.photos,
     extraCosts: extraCosts ?? this.extraCosts,
+    lifecycle: lifecycle ?? this.lifecycle,
+    cooldownUntil: identical(cooldownUntil, _unset)
+        ? this.cooldownUntil
+        : cooldownUntil as DateTime?,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: identical(deletedAt, _unset) ? this.deletedAt : deletedAt as DateTime?,
@@ -192,6 +206,8 @@ class ItemDraft {
     required this.tags,
     this.photos = const [],
     this.extraCosts = const [],
+    this.lifecycle = ItemLifecycle.inUse,
+    this.cooldownUntil,
   });
 
   final String name;
@@ -216,6 +232,8 @@ class ItemDraft {
   final List<String> tags;
   final List<String> photos;
   final List<ItemCostDraft> extraCosts;
+  final ItemLifecycle lifecycle;
+  final DateTime? cooldownUntil;
 
   double get extraCostsTotal =>
       extraCosts.fold(0.0, (sum, c) => sum + c.amount);

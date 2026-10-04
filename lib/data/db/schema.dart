@@ -1,10 +1,11 @@
-/// SQLite schema DDL 与种子数据。schemaVersion = 3。
+/// SQLite schema DDL 与种子数据。schemaVersion = 4。
 ///
 /// v2: item_costs 表（TCO 附加成本）；items 增列 apr/installment/currency/photos。
 /// v3: budgets 表（预算：日/周/月/年 + 分类子预算）。
+/// v4: checkins 表（使用打卡）；items 增列 lifecycle/cooldown_until。
 library;
 
-const int schemaVersion = 3;
+const int schemaVersion = 4;
 
 /// 建表语句（按依赖顺序执行）。
 const List<String> schemaSql = [
@@ -31,6 +32,8 @@ CREATE TABLE items (
   installment_months INTEGER,
   currency       TEXT    NOT NULL DEFAULT 'CNY',
   photos         TEXT    NOT NULL DEFAULT '[]',
+  lifecycle      TEXT    NOT NULL DEFAULT 'inUse',
+  cooldown_until TEXT,
   created_at     TEXT    NOT NULL,
   updated_at     TEXT    NOT NULL,
   deleted_at     TEXT
@@ -82,6 +85,17 @@ CREATE TABLE budgets (
   UNIQUE(period, category)
 )
 ''',
+  '''
+CREATE TABLE checkins (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id   INTEGER NOT NULL,
+  checked_on TEXT   NOT NULL,
+  note      TEXT    NOT NULL DEFAULT '',
+  UNIQUE(item_id, checked_on),
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+)
+''',
+  'CREATE INDEX idx_checkins_item ON checkins(item_id)',
 ];
 
 /// v3 迁移语句（对 v2 库执行）。
@@ -96,6 +110,23 @@ CREATE TABLE budgets (
   UNIQUE(period, category)
 )
 ''',
+];
+
+/// v4 迁移语句（对 v3 及更早的库执行）。
+const List<String> migrationV3ToV4 = [
+  "ALTER TABLE items ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'inUse'",
+  'ALTER TABLE items ADD COLUMN cooldown_until TEXT',
+  '''
+CREATE TABLE checkins (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id   INTEGER NOT NULL,
+  checked_on TEXT   NOT NULL,
+  note      TEXT    NOT NULL DEFAULT '',
+  UNIQUE(item_id, checked_on),
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+)
+''',
+  'CREATE INDEX idx_checkins_item ON checkins(item_id)',
 ];
 
 /// v2 迁移语句（对 v1 库逐条执行）。

@@ -6,6 +6,7 @@ import '../../features/analysis/analysis_page.dart';
 import '../../features/calculator/calculator_page.dart';
 import '../../features/data_manage/data_manage_page.dart';
 import '../../features/data_manage/recycle_bin_page.dart';
+import '../../features/decisions/decisions_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/item_edit/item_edit_page.dart';
 import '../../features/settings/settings_page.dart';
@@ -70,6 +71,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/analysis',
         name: 'analysis',
         builder: (context, state) => const AnalysisPage(),
+      ),
+      GoRoute(
+        path: '/decisions',
+        name: 'decisions',
+        builder: (context, state) => const DecisionsPage(),
       ),
     ],
   );

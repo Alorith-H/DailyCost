@@ -12,7 +12,7 @@ import '../../stats/application/stats_engine.dart';
 
 /// 过去 N 天的每日日均总支出。
 final trendProvider = Provider.family<List<TrendPoint>, int>((ref, days) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
   final from = today.subtract(Duration(days: days - 1));
@@ -28,7 +28,7 @@ final trendProvider = Provider.family<List<TrendPoint>, int>((ref, days) {
 
 /// 分类日均份额（在用物品）。
 final categorySharesProvider = Provider<List<CategoryShare>>((ref) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
   return categoryShares({
@@ -38,7 +38,7 @@ final categorySharesProvider = Provider<List<CategoryShare>>((ref) {
 
 /// 散点：摊薄天数 × 日均。
 final scatterPointsProvider = Provider<List<ScatterPoint>>((ref) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
   return scatterPoints({
@@ -48,7 +48,7 @@ final scatterPointsProvider = Provider<List<ScatterPoint>>((ref) {
 
 /// TOP10 榜单。
 final topListsProvider = Provider<TopLists>((ref) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
   return topLists({
@@ -58,7 +58,7 @@ final topListsProvider = Provider<TopLists>((ref) {
 
 /// 订阅类记录（续费管理）。
 final subscriptionItemsProvider = Provider<List<Item>>((ref) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   return [
     for (final it in items)
       if (it.calcMode == CalcMode.subscription) it,
@@ -88,7 +88,7 @@ final budgetsProvider =
 /// 预算执行情况。
 final budgetStatusProvider = Provider<List<BudgetStatus>>((ref) {
   final budgets = ref.watch(budgetsProvider).value ?? const <Budget>[];
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
 

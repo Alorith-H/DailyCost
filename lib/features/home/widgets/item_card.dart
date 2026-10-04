@@ -15,12 +15,14 @@ class ItemCard extends StatelessWidget {
     required this.result,
     required this.onTap,
     required this.onDelete,
+    required this.onCheckIn,
   });
 
   final Item item;
   final CalcResult result;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback onCheckIn;
 
   /// 价格行文案：TCO/分期/币种信息优先。
   String get _costLabel {
@@ -62,6 +64,16 @@ class ItemCard extends StatelessWidget {
                   _CategoryChip(item.category),
                   const SizedBox(width: 8),
                   _StatusBadge(result.status),
+                  if (item.lifecycle != ItemLifecycle.inUse)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _LifecycleBadge(item.lifecycle),
+                    ),
+                  IconButton(
+                    tooltip: '今日打卡',
+                    icon: const Icon(Icons.check_circle_outline, size: 20),
+                    onPressed: onCheckIn,
+                  ),
                   PopupMenuButton<String>(
                     onSelected: (v) {
                       if (v == 'delete') onDelete();
@@ -193,6 +205,30 @@ class _CategoryChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(category, style: theme.textTheme.labelSmall),
+    );
+  }
+}
+
+class _LifecycleBadge extends StatelessWidget {
+  const _LifecycleBadge(this.lifecycle);
+
+  final ItemLifecycle lifecycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        lifecycle.labelZh,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onTertiaryContainer,
+        ),
+      ),
     );
   }
 }

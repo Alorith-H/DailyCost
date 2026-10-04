@@ -53,6 +53,8 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
 
   String _category = kDefaultCategory;
   String _currency = 'CNY';
+  ItemLifecycle _lifecycle = ItemLifecycle.inUse;
+  DateTime? _cooldownUntil;
   CalcMode _calcMode = CalcMode.fixedDays;
   DepreciationMethod _depreciation = DepreciationMethod.straightLine;
   CycleUnit _cycleUnit = CycleUnit.monthly;
@@ -105,6 +107,8 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
       _residual.text = item.residual.toStringAsFixed(2);
       _category = item.category;
       _currency = item.currency;
+      _lifecycle = item.lifecycle;
+      _cooldownUntil = item.cooldownUntil;
       _purchaseDate = item.purchaseDate;
       _endDate = item.endDate;
       _calcMode = item.calcMode;
@@ -248,6 +252,38 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
                 if (picked != null) setState(() => _purchaseDate = picked);
               },
             ),
+            const SizedBox(height: 12),
+            _label('状态'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final l in ItemLifecycle.values)
+                  ChoiceChip(
+                    label: Text(l.labelZh),
+                    selected: _lifecycle == l,
+                    onSelected: (_) => setState(() => _lifecycle = l),
+                  ),
+              ],
+            ),
+            if (_lifecycle.isWishlist) ...[
+              const SizedBox(height: 8),
+              _label('冷静期截止（可选）'),
+              _DateField(
+                date: _cooldownUntil,
+                placeholder: '不设置则无倒计时',
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _cooldownUntil ??
+                        DateTime.now().add(const Duration(days: 7)),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setState(() => _cooldownUntil = picked);
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             _label('分期（等额本息，可选）'),
             Row(
@@ -766,6 +802,8 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
       tags: List.of(_tags),
       photos: List.of(_photos),
       extraCosts: List.of(_costs),
+      lifecycle: _lifecycle,
+      cooldownUntil: _lifecycle.isWishlist ? _cooldownUntil : null,
     );
 
     final notifier = ref.read(itemsProvider.notifier);
@@ -794,6 +832,8 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
           note: draft.note,
           tags: draft.tags,
           photos: draft.photos,
+          lifecycle: draft.lifecycle,
+          cooldownUntil: draft.cooldownUntil,
           extraCosts: [
             for (final c in draft.extraCosts)
               ItemCost(

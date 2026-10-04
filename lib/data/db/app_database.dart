@@ -86,6 +86,11 @@ class AppDatabase {
         await db.execute(sql);
       }
     }
+    if (oldVersion < 4) {
+      for (final sql in migrationV3ToV4) {
+        await db.execute(sql);
+      }
+    }
   }
 
   static Future<void> _encryptLegacy(

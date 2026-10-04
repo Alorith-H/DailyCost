@@ -4,6 +4,7 @@ import '../../../data/providers.dart';
 import '../../../domain/calc/calc_engine.dart';
 import '../../../domain/models/calc_result.dart';
 import '../../../domain/models/daily_summary.dart';
+import '../../../domain/models/enums.dart';
 import '../../../domain/models/item.dart';
 import '../../data_manage/application/undo_service.dart';
 import '../../settings/application/settings_providers.dart';
@@ -96,6 +97,23 @@ class ItemsNotifier extends AsyncNotifier<List<Item>> {
 final itemsProvider =
     AsyncNotifierProvider<ItemsNotifier, List<Item>>(ItemsNotifier.new);
 
+/// 计入汇总的「持有中」物品（使用中/闲置）。
+/// 待购清单与已售/丢弃不参与日均总支出。
+final activeItemsProvider = Provider<List<Item>>((ref) {
+  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  return [
+    for (final it in items)
+      if (it.lifecycle == ItemLifecycle.inUse || it.lifecycle == ItemLifecycle.idle)
+        it,
+  ];
+});
+
+/// 待购清单（想买/待购）。
+final wishlistItemsProvider = Provider<List<Item>>((ref) {
+  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  return [for (final it in items) if (it.lifecycle.isWishlist) it];
+});
+
 /// 每条记录的计算结果（按 id 索引，金额已折算人民币）。
 final calcResultsProvider = Provider<Map<int, CalcResult>>((ref) {
   final items = ref.watch(itemsProvider).value ?? const <Item>[];
@@ -112,11 +130,29 @@ final calcResultsProvider = Provider<Map<int, CalcResult>>((ref) {
 
 /// 首页汇总（今日/昨日总额、环比、在用数）。
 final dailySummaryProvider = Provider<DailySummary>((ref) {
-  final items = ref.watch(itemsProvider).value ?? const <Item>[];
+  final items = ref.watch(activeItemsProvider);
   final today = ref.watch(todayProvider);
   final rates = ref.watch(fxRatesProvider);
   return summarize(
     items.map((e) => e.toCalcInputs(fxRate: rates[e.currency] ?? 1.0)),
     today: today,
+  );
+});
+
+/// 某物品的打卡情况（近 30 天天数 + 最近打卡日）。
+class CheckinInfo {
+  const CheckinInfo({required this.days30, required this.lastCheckIn});
+
+  final int days30;
+  final DateTime? lastCheckIn;
+}
+
+final checkinInfoProvider =
+    FutureProvider.family<CheckinInfo, int>((ref, itemId) async {
+  final repo = ref.watch(checkinRepositoryProvider);
+  final since = DateTime.now().subtract(const Duration(days: 30));
+  return CheckinInfo(
+    days30: await repo.countSince(itemId, since),
+    lastCheckIn: await repo.lastCheckIn(itemId),
   );
 });
