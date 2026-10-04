@@ -1,9 +1,10 @@
-/// SQLite schema DDL 与种子数据。schemaVersion = 2。
+/// SQLite schema DDL 与种子数据。schemaVersion = 3。
 ///
 /// v2: item_costs 表（TCO 附加成本）；items 增列 apr/installment/currency/photos。
+/// v3: budgets 表（预算：日/周/月/年 + 分类子预算）。
 library;
 
-const int schemaVersion = 2;
+const int schemaVersion = 3;
 
 /// 建表语句（按依赖顺序执行）。
 const List<String> schemaSql = [
@@ -71,6 +72,30 @@ CREATE TABLE item_costs (
 )
 ''',
   'CREATE INDEX idx_item_costs_item ON item_costs(item_id)',
+  '''
+CREATE TABLE budgets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  period     TEXT    NOT NULL,
+  category   TEXT,
+  amount_fen INTEGER NOT NULL CHECK (amount_fen > 0),
+  created_at TEXT    NOT NULL,
+  UNIQUE(period, category)
+)
+''',
+];
+
+/// v3 迁移语句（对 v2 库执行）。
+const List<String> migrationV2ToV3 = [
+  '''
+CREATE TABLE budgets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  period     TEXT    NOT NULL,
+  category   TEXT,
+  amount_fen INTEGER NOT NULL CHECK (amount_fen > 0),
+  created_at TEXT    NOT NULL,
+  UNIQUE(period, category)
+)
+''',
 ];
 
 /// v2 迁移语句（对 v1 库逐条执行）。

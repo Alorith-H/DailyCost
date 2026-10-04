@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/utils/date_utils.dart';
 import 'db/app_database.dart';
+import 'repositories/budget_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/settings_repository.dart';
 
@@ -16,6 +17,10 @@ final itemRepositoryProvider = Provider<ItemRepository>(
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(databaseProvider)),
+);
+
+final budgetRepositoryProvider = Provider<BudgetRepository>(
+  (ref) => BudgetRepository(ref.watch(databaseProvider)),
 );
 
 /// 「今天」（仅日期）。回前台/跨零点时通过 ref.invalidate 重算。

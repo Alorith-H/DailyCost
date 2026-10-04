@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/analysis/analysis_page.dart';
 import '../../features/calculator/calculator_page.dart';
 import '../../features/data_manage/data_manage_page.dart';
 import '../../features/data_manage/recycle_bin_page.dart';
@@ -64,6 +65,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const RecycleBinPage(),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/analysis',
+        name: 'analysis',
+        builder: (context, state) => const AnalysisPage(),
       ),
     ],
   );

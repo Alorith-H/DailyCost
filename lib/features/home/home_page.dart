@@ -50,6 +50,13 @@ class _HomePageState extends ConsumerState<HomePage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('每日花费'),
+        actions: [
+          IconButton(
+            tooltip: '分析',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => context.pushNamed('analysis'),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20),
           child: Align(
