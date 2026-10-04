@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/calc/calc_engine.dart';
+import '../../domain/models/calc_inputs.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/item.dart';
 import '../home/application/home_providers.dart';
@@ -62,7 +63,8 @@ DateTime _periodEnd(ReportPeriod period) {
 }
 
 /// 每个商品在时间范围内的每日均分累计总额。
-/// 逐日累加 calculate(input, today: day).dailyCost，仅计在用商品。
+/// 正确算法：每天实际花费 = 当天剩余价值 − 次日剩余价值（真实摊薄额），
+/// 而不是累加"当前均分率"（那会导致调和级数溢出）。
 ({List<({String name, double total, int days})> items, double total, int totalDays})
     aggregateItemCosts(List<Item> items, ReportPeriod period) {
   final start = _periodStart(period);
@@ -80,11 +82,14 @@ DateTime _periodEnd(ReportPeriod period) {
       day = day.add(const Duration(days: 1))) {
     dayIdx++;
     for (final it in items) {
-      final r = calculate(it.toCalcInputs(), today: day);
+      final c = it.toCalcInputs();
+      final r = calculate(c, today: day);
       if (r.status != ItemStatus.inUse) continue;
-      totals[it.name] = (totals[it.name] ?? 0) + r.dailyCost;
+      // 每天实际花费 = 当天剩余价值 − 次日剩余价值
+      final dayCost = _dailyDepreciation(c, day);
+      totals[it.name] = (totals[it.name] ?? 0) + dayCost;
       dayCount[it.name] = (dayCount[it.name] ?? 0) + 1;
-      grandTotal += r.dailyCost;
+      grandTotal += dayCost;
     }
   }
 
@@ -116,16 +121,42 @@ List<({DateTime date, double total, List<({String name, double cost})> items})>
     final dayItems = <({String name, double cost})>[];
     var dayTotal = 0.0;
     for (final it in items) {
-      final r = calculate(it.toCalcInputs(), today: day);
+      final c = it.toCalcInputs();
+      final r = calculate(c, today: day);
       if (r.status != ItemStatus.inUse) continue;
-      dayItems.add((name: it.name, cost: r.dailyCost));
-      dayTotal += r.dailyCost;
+      final dayCost = _dailyDepreciation(c, day);
+      dayItems.add((name: it.name, cost: dayCost));
+      dayTotal += dayCost;
     }
     if (dayItems.isNotEmpty) {
       result.add((date: day, total: dayTotal, items: dayItems));
     }
   }
   return result;
+}
+
+/// 某商品某天的真实摊薄花费 = 当天剩余价值 − 次日剩余价值。
+/// 不依赖 dailyCost（那是运行均分率，累加会溢出）。
+double _dailyDepreciation(CalcInputs c, DateTime day) {
+  final r = calculate(c, today: day);
+  if (r.status != ItemStatus.inUse) return 0;
+
+  // 对于 actualDays（开放式），totalDays 未知，用已用天数估算
+  double totalDays;
+  if (r.totalDays != null) {
+    totalDays = r.totalDays!;
+  } else {
+    totalDays = r.elapsedDays.clamp(1, double.infinity);
+  }
+
+  final price = c.price.clamp(0, double.infinity);
+  final residual = c.residual.clamp(0, price);
+  final effectiveCost = price + (c.tcoExtra > 0 ? c.tcoExtra : 0);
+  final clampedResidual = residual.clamp(0, effectiveCost);
+
+  // 直线折旧：每天摊薄 = (总成本 − 残值) / 总天数
+  final daily = (effectiveCost - clampedResidual) / totalDays;
+  return daily.clamp(0, double.infinity);
 }
 
 // ── 数据管理页面 ──────────────────────────────────────────────────
