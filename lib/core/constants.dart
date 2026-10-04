@@ -2,7 +2,7 @@
 library;
 
 /// 版本号（设置页「关于」展示）。
-const String kAppVersion = '0.1.0';
+const String kAppVersion = '0.2.0';
 
 /// 分类芯片列表（固定内置，未来可自定义）。
 const List<String> kCategories = [

@@ -86,7 +86,7 @@ class ReminderScheduler {
       await _service.schedule(
         id: id++,
         title: '本周花费小结',
-        body: '打开「每日花费」看看这周的钱都花到哪了',
+        body: '打开「DailyCost」看看这周的钱都花到哪了',
         at: _nextWeekday9(DateTime.now()),
         repeat: DateTimeComponents.dayOfWeekAndTime,
       );

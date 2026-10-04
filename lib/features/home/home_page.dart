@@ -49,7 +49,7 @@ class _HomePageState extends ConsumerState<HomePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('每日花费'),
+        title: const Text('DailyCost'),
         actions: [
           IconButton(
             tooltip: '购物决策',

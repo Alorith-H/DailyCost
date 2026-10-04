@@ -283,7 +283,7 @@ class _ReportCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('每日花费 · 消费报告', style: theme.textTheme.titleLarge),
+            Text('DailyCost · 消费报告', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(dateLong(now), style: theme.textTheme.bodySmall),
             const Divider(height: 24),
