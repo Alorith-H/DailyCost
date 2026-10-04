@@ -63,14 +63,26 @@ DateTime _periodEnd(ReportPeriod period) {
 }
 
 /// 每个商品在时间范围内的每日均分累计总额。
-/// 正确算法：每天实际花费 = 当天剩余价值 − 次日剩余价值（真实摊薄额），
-/// 而不是累加"当前均分率"（那会导致调和级数溢出）。
+/// 正确算法：总天数在时间段末统一算一次，每天用固定摊薄额 (总成本−残值)/总天数。
+/// 不用逐日重算 elapsedDays（那会得到调和级数，累加远超原价）。
 ({List<({String name, double total, int days})> items, double total, int totalDays})
     aggregateItemCosts(List<Item> items, ReportPeriod period) {
   final start = _periodStart(period);
   final end = _periodEnd(period);
   final today = DateTime.now();
   final safeEnd = end.isAfter(today) ? today : end;
+
+  // 预计算每件商品的固定日摊薄额（用时间段末的已用天数作为总天数）
+  final dailyRates = <String, double>{};
+  for (final it in items) {
+    final c = it.toCalcInputs();
+    final rEnd = calculate(c, today: safeEnd);
+    if (rEnd.status != ItemStatus.inUse) continue;
+    final totalDays = rEnd.totalDays ?? rEnd.elapsedDays.clamp(1.0, double.infinity);
+    final effectiveCost = c.price + (c.tcoExtra > 0 ? c.tcoExtra : 0);
+    final clampedResidual = c.residual.clamp(0.0, effectiveCost);
+    dailyRates[it.name] = ((effectiveCost - clampedResidual) / totalDays).clamp(0.0, double.infinity);
+  }
 
   final totals = <String, double>{};
   final dayCount = <String, int>{};
@@ -82,14 +94,13 @@ DateTime _periodEnd(ReportPeriod period) {
       day = day.add(const Duration(days: 1))) {
     dayIdx++;
     for (final it in items) {
-      final c = it.toCalcInputs();
-      final r = calculate(c, today: day);
+      final rate = dailyRates[it.name];
+      if (rate == null || rate <= 0) continue;
+      final r = calculate(it.toCalcInputs(), today: day);
       if (r.status != ItemStatus.inUse) continue;
-      // 每天实际花费 = 当天剩余价值 − 次日剩余价值
-      final dayCost = _dailyDepreciation(c, day);
-      totals[it.name] = (totals[it.name] ?? 0) + dayCost;
+      totals[it.name] = (totals[it.name] ?? 0) + rate;
       dayCount[it.name] = (dayCount[it.name] ?? 0) + 1;
-      grandTotal += dayCost;
+      grandTotal += rate;
     }
   }
 
@@ -113,6 +124,18 @@ List<({DateTime date, double total, List<({String name, double cost})> items})>
   final today = DateTime.now();
   final safeEnd = end.isAfter(today) ? today : end;
 
+  // 预计算每件商品的固定日摊薄额
+  final dailyRates = <String, double>{};
+  for (final it in items) {
+    final c = it.toCalcInputs();
+    final rEnd = calculate(c, today: safeEnd);
+    if (rEnd.status != ItemStatus.inUse) continue;
+    final totalDays = rEnd.totalDays ?? rEnd.elapsedDays.clamp(1.0, double.infinity);
+    final effectiveCost = c.price + (c.tcoExtra > 0 ? c.tcoExtra : 0);
+    final clampedResidual = c.residual.clamp(0.0, effectiveCost);
+    dailyRates[it.name] = ((effectiveCost - clampedResidual) / totalDays).clamp(0.0, double.infinity);
+  }
+
   final result = <({DateTime date, double total, List<({String name, double cost})> items})>[];
 
   for (var day = DateTime(start.year, start.month, start.day);
@@ -121,42 +144,18 @@ List<({DateTime date, double total, List<({String name, double cost})> items})>
     final dayItems = <({String name, double cost})>[];
     var dayTotal = 0.0;
     for (final it in items) {
-      final c = it.toCalcInputs();
-      final r = calculate(c, today: day);
+      final rate = dailyRates[it.name];
+      if (rate == null || rate <= 0) continue;
+      final r = calculate(it.toCalcInputs(), today: day);
       if (r.status != ItemStatus.inUse) continue;
-      final dayCost = _dailyDepreciation(c, day);
-      dayItems.add((name: it.name, cost: dayCost));
-      dayTotal += dayCost;
+      dayItems.add((name: it.name, cost: rate));
+      dayTotal += rate;
     }
     if (dayItems.isNotEmpty) {
       result.add((date: day, total: dayTotal, items: dayItems));
     }
   }
   return result;
-}
-
-/// 某商品某天的真实摊薄花费 = 当天剩余价值 − 次日剩余价值。
-/// 不依赖 dailyCost（那是运行均分率，累加会溢出）。
-double _dailyDepreciation(CalcInputs c, DateTime day) {
-  final r = calculate(c, today: day);
-  if (r.status != ItemStatus.inUse) return 0;
-
-  // 对于 actualDays（开放式），totalDays 未知，用已用天数估算
-  double totalDays;
-  if (r.totalDays != null) {
-    totalDays = r.totalDays!;
-  } else {
-    totalDays = r.elapsedDays.clamp(1, double.infinity);
-  }
-
-  final price = c.price.clamp(0, double.infinity);
-  final residual = c.residual.clamp(0, price);
-  final effectiveCost = price + (c.tcoExtra > 0 ? c.tcoExtra : 0);
-  final clampedResidual = residual.clamp(0, effectiveCost);
-
-  // 直线折旧：每天摊薄 = (总成本 − 残值) / 总天数
-  final daily = (effectiveCost - clampedResidual) / totalDays;
-  return daily.clamp(0, double.infinity);
 }
 
 // ── 数据管理页面 ──────────────────────────────────────────────────
