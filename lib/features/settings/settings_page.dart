@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants.dart';
+import '../../core/utils/app_version.dart';
 import '../../domain/models/enums.dart';
 import '../update/application/update_providers.dart';
 import 'application/settings_providers.dart';
@@ -141,7 +142,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SectionHeader('关于'),
           ListTile(
             title: const Text('版本'),
-            trailing: Text(kAppVersion, style: TextStyle(color: scheme.onSurfaceVariant)),
+            trailing: Text(
+              ref.watch(appVersionProvider).value ?? kAppVersion,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -205,7 +209,8 @@ class _UpdateTile extends ConsumerWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         );
       case UpdatePhase.upToDate:
-        subtitle = '已是最新版本（v$kAppVersion）';
+        subtitle =
+            '已是最新版本（v${ref.watch(appVersionProvider).value ?? kAppVersion}）';
         trailing = TextButton(
           onPressed: () => notifier.check(),
           child: const Text('再查一次'),

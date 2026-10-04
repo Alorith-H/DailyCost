@@ -1,4 +1,5 @@
 import 'package:daily_cost/app.dart';
+import 'package:daily_cost/core/utils/app_version.dart';
 import 'package:daily_cost/features/home/application/home_providers.dart';
 import 'package:daily_cost/features/notifications/notification_service.dart';
 import 'package:daily_cost/features/notifications/reminder_providers.dart';
@@ -61,6 +62,7 @@ Future<ProviderContainer> pumpApp(WidgetTester tester) async {
         settingsProvider.overrideWith(() => SettingsNotifier()),
         updateServiceProvider.overrideWith((ref) => FakeUpdateService()),
         supportedAbisProvider.overrideWith((ref) async => const ['arm64-v8a']),
+        appVersionProvider.overrideWith((ref) async => '0.2.0'),
         notificationServiceProvider.overrideWith(
           (ref) => FakeNotificationService(),
         ),

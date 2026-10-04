@@ -1,7 +1,7 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants.dart';
+import '../../../core/utils/app_version.dart';
 import '../../settings/application/settings_providers.dart';
 import 'update_service.dart';
 
@@ -55,8 +55,9 @@ class UpdateNotifier extends Notifier<UpdateState> {
     state = const UpdateState(phase: UpdatePhase.checking);
     try {
       final abis = await ref.read(supportedAbisProvider.future);
+      final version = await ref.read(appVersionProvider.future);
       final info = await ref.read(updateServiceProvider).checkForUpdate(
-        currentVersion: kAppVersion,
+        currentVersion: version,
         supportedAbis: abis,
       );
       if (info == null) {
