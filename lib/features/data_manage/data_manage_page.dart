@@ -581,47 +581,55 @@ class _ReportCard extends StatelessWidget {
     );
   }
 
-  /// 按日明细：每天各商品的日均花费。
+  /// 按日视图：每件商品的平均一天花费（不按日期列举）。
   Widget _buildDailyDetail(ThemeData theme, List<Item> items, ReportPeriod period) {
-    final daily = aggregateDailyCosts(items, period);
+    final agg = aggregateItemCosts(items, period);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final day in daily) ...[
-          // 日期 + 当日总计
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        // 表头
+        Row(
+          children: [
+            Expanded(flex: 3, child: Text('商品', style: theme.textTheme.bodySmall)),
+            Expanded(flex: 2, child: Align(
+              alignment: Alignment.centerRight,
+              child: Text('天数', style: theme.textTheme.bodySmall),
+            )),
+            Expanded(flex: 3, child: Align(
+              alignment: Alignment.centerRight,
+              child: Text('日均花费', style: theme.textTheme.bodySmall),
+            )),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (final e in agg.items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
               children: [
-                Text(
-                  '${day.date.month}月${day.date.day}日',
-                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  flex: 3,
+                  child: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
-                const Spacer(),
-                Text(
-                  '${money(day.total)}  ·  ${day.items.length} 项',
-                  style: theme.textTheme.bodySmall,
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('${e.days}', style: theme.textTheme.bodySmall),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${money(e.total / e.days.clamp(1, 999999))}/天',
+                      style: theme.textTheme.moneyInline,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          // 各商品明细
-          for (final item in day.items)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall),
-                  ),
-                  Text(money(item.cost), style: theme.textTheme.moneyInline?.copyWith(fontSize: 11)),
-                ],
-              ),
-            ),
-        ],
       ],
     );
   }
