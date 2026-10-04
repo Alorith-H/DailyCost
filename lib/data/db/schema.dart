@@ -106,4 +106,8 @@ abstract final class SettingsKeys {
   static const coffeePriceFen = 'coffee_price_fen';
   static const autoUpdateCheck = 'auto_update_check';
   static const fxRates = 'fx_rates';
+  static const notifyExpiry = 'notify_expiry';
+  static const notifyRenewal = 'notify_renewal';
+  static const notifyWeekly = 'notify_weekly';
+  static const notifyBackup = 'notify_backup';
 }

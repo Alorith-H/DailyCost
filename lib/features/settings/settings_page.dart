@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants.dart';
 import '../../domain/models/enums.dart';
@@ -85,6 +86,43 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ],
             ),
+          ),
+          _SectionHeader('提醒'),
+          SwitchListTile(
+            title: const Text('到期提醒'),
+            subtitle: const Text('物品到期前 3 天通知'),
+            value: settings.notifyExpiry,
+            onChanged: (v) =>
+                ref.read(settingsProvider.notifier).setNotifyExpiry(v),
+          ),
+          SwitchListTile(
+            title: const Text('续费提醒'),
+            subtitle: const Text('订阅续费前 2 天通知'),
+            value: settings.notifyRenewal,
+            onChanged: (v) =>
+                ref.read(settingsProvider.notifier).setNotifyRenewal(v),
+          ),
+          SwitchListTile(
+            title: const Text('每周小结'),
+            subtitle: const Text('每周一 9:00 提醒查看花费'),
+            value: settings.notifyWeekly,
+            onChanged: (v) =>
+                ref.read(settingsProvider.notifier).setNotifyWeekly(v),
+          ),
+          SwitchListTile(
+            title: const Text('备份提醒'),
+            subtitle: const Text('每月 1 日提醒导出备份'),
+            value: settings.notifyBackup,
+            onChanged: (v) =>
+                ref.read(settingsProvider.notifier).setNotifyBackup(v),
+          ),
+          _SectionHeader('数据'),
+          ListTile(
+            leading: const Icon(Icons.storage_outlined),
+            title: const Text('数据管理'),
+            subtitle: const Text('导出、导入、备份恢复、回收站、撤销重做'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.pushNamed('dataManage'),
           ),
           _SectionHeader('更新'),
           SwitchListTile(

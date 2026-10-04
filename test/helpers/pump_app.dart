@@ -1,8 +1,11 @@
 import 'package:daily_cost/app.dart';
 import 'package:daily_cost/features/home/application/home_providers.dart';
+import 'package:daily_cost/features/notifications/notification_service.dart';
+import 'package:daily_cost/features/notifications/reminder_providers.dart';
 import 'package:daily_cost/features/settings/application/settings_providers.dart';
 import 'package:daily_cost/features/update/application/update_providers.dart';
 import 'package:daily_cost/features/update/application/update_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,6 +31,24 @@ class FakeUpdateService extends UpdateService {
       throw UnimplementedError();
 }
 
+/// 假通知服务：不碰平台通道。
+class FakeNotificationService extends NotificationService {
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<void> cancelAll() async {}
+
+  @override
+  Future<void> schedule({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime at,
+    DateTimeComponents? repeat,
+  }) async {}
+}
+
 /// 挂载整个 App（内存假数据，不碰 sqlite3 / 平台通道）。
 ///
 /// 真实 DB 接线由 test/data/* 用普通 test() 覆盖；
@@ -40,6 +61,9 @@ Future<ProviderContainer> pumpApp(WidgetTester tester) async {
         settingsProvider.overrideWith(() => SettingsNotifier()),
         updateServiceProvider.overrideWith((ref) => FakeUpdateService()),
         supportedAbisProvider.overrideWith((ref) async => const ['arm64-v8a']),
+        notificationServiceProvider.overrideWith(
+          (ref) => FakeNotificationService(),
+        ),
       ],
       child: const DailyCostApp(),
     ),

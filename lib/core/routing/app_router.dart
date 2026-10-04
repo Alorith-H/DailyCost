@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/calculator/calculator_page.dart';
+import '../../features/data_manage/data_manage_page.dart';
+import '../../features/data_manage/recycle_bin_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/item_edit/item_edit_page.dart';
 import '../../features/settings/settings_page.dart';
@@ -50,6 +52,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ItemEditPage.edit(
           itemId: int.tryParse(state.pathParameters['id'] ?? '') ?? -1,
         ),
+      ),
+      GoRoute(
+        path: '/data-manage',
+        name: 'dataManage',
+        builder: (context, state) => const DataManagePage(),
+        routes: [
+          GoRoute(
+            path: 'recycle-bin',
+            name: 'recycleBin',
+            builder: (context, state) => const RecycleBinPage(),
+          ),
+        ],
       ),
     ],
   );

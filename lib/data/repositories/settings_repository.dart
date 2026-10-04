@@ -26,6 +26,10 @@ class SettingsRepository {
       // 旧库可能没有该键：默认开启
       autoUpdateCheck: map[SettingsKeys.autoUpdateCheck] != '0',
       fxRates: _parseFxRates(map[SettingsKeys.fxRates]),
+      notifyExpiry: map[SettingsKeys.notifyExpiry] != '0',
+      notifyRenewal: map[SettingsKeys.notifyRenewal] != '0',
+      notifyWeekly: map[SettingsKeys.notifyWeekly] != '0',
+      notifyBackup: map[SettingsKeys.notifyBackup] != '0',
     );
   }
 
@@ -69,4 +73,7 @@ class SettingsRepository {
     final merged = {...current.fxRates, currency: rateToCny};
     await setValue(SettingsKeys.fxRates, jsonEncode(merged));
   }
+
+  Future<void> setNotify(String key, bool enabled) =>
+      setValue(key, enabled ? '1' : '0');
 }

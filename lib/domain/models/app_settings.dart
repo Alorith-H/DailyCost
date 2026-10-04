@@ -7,6 +7,10 @@ class AppSettings {
     required this.coffeePriceFen,
     required this.autoUpdateCheck,
     required this.fxRates,
+    this.notifyExpiry = true,
+    this.notifyRenewal = true,
+    this.notifyWeekly = true,
+    this.notifyBackup = true,
   });
 
   static const defaults = AppSettings(
@@ -27,6 +31,12 @@ class AppSettings {
   /// 离线汇率表：1 单位外币 → 人民币（读取时已与默认表合并）
   final Map<String, double> fxRates;
 
+  /// 提醒开关
+  final bool notifyExpiry;
+  final bool notifyRenewal;
+  final bool notifyWeekly;
+  final bool notifyBackup;
+
   /// 咖啡单价（元）
   double get coffeePriceYuan => coffeePriceFen / 100.0;
 
@@ -38,10 +48,18 @@ class AppSettings {
     int? coffeePriceFen,
     bool? autoUpdateCheck,
     Map<String, double>? fxRates,
+    bool? notifyExpiry,
+    bool? notifyRenewal,
+    bool? notifyWeekly,
+    bool? notifyBackup,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     coffeePriceFen: coffeePriceFen ?? this.coffeePriceFen,
     autoUpdateCheck: autoUpdateCheck ?? this.autoUpdateCheck,
     fxRates: fxRates ?? this.fxRates,
+    notifyExpiry: notifyExpiry ?? this.notifyExpiry,
+    notifyRenewal: notifyRenewal ?? this.notifyRenewal,
+    notifyWeekly: notifyWeekly ?? this.notifyWeekly,
+    notifyBackup: notifyBackup ?? this.notifyBackup,
   );
 }

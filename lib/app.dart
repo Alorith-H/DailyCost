@@ -4,6 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'data/providers.dart';
+import 'domain/models/item.dart';
+import 'features/home/application/home_providers.dart';
+import 'features/notifications/reminder_providers.dart';
+import 'features/notifications/reminder_scheduler.dart';
 import 'features/settings/application/settings_providers.dart';
 import 'features/update/application/update_providers.dart';
 
@@ -61,7 +66,10 @@ class _UpdateAutoCheckerState extends ConsumerState<_UpdateAutoChecker>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _maybeAutoCheck();
+    if (state == AppLifecycleState.resumed) {
+      _maybeAutoCheck();
+      _refreshReminders();
+    }
   }
 
   void _maybeAutoCheck() {
@@ -69,6 +77,23 @@ class _UpdateAutoCheckerState extends ConsumerState<_UpdateAutoChecker>
     if (!ref.read(settingsProvider).autoUpdateCheck) return;
     _checkedOnce = true;
     ref.read(updateProvider.notifier).check(auto: true);
+  }
+
+  /// 全量重排本地提醒（幂等，物品/设置变化或回前台时触发）。
+  void _refreshReminders() {
+    final settings = ref.read(settingsProvider);
+    final items = ref.read(itemsProvider).value ?? const <Item>[];
+    final today = ref.read(todayProvider);
+    ref.read(reminderSchedulerProvider).rescheduleAll(
+      ReminderRequest(
+        items: items,
+        today: today,
+        notifyExpiry: settings.notifyExpiry,
+        notifyRenewal: settings.notifyRenewal,
+        notifyWeekly: settings.notifyWeekly,
+        notifyBackup: settings.notifyBackup,
+      ),
+    );
   }
 
   @override
@@ -84,6 +109,8 @@ class _UpdateAutoCheckerState extends ConsumerState<_UpdateAutoChecker>
         _promptInstall(next.info!.version);
       }
     });
+    ref.listen(itemsProvider, (previous, next) => _refreshReminders());
+    ref.listen(settingsProvider, (previous, next) => _refreshReminders());
     return widget.child ?? const SizedBox.shrink();
   }
 

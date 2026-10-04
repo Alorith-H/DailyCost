@@ -105,6 +105,11 @@ class ItemRepository {
     );
   }
 
+  /// 彻底删除（含软删除记录），不可恢复。
+  Future<void> hardDelete(int id) async {
+    await _db.db.delete('items', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<List<Item>> findAll({bool includeDeleted = false}) async {
     final rows = await _db.db.query(
       'items',

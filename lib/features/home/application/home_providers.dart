@@ -5,7 +5,11 @@ import '../../../domain/calc/calc_engine.dart';
 import '../../../domain/models/calc_result.dart';
 import '../../../domain/models/daily_summary.dart';
 import '../../../domain/models/item.dart';
+import '../../data_manage/application/undo_service.dart';
 import '../../settings/application/settings_providers.dart';
+
+/// 撤销/重做栈。
+final undoServiceProvider = Provider<UndoService>((ref) => UndoService());
 
 /// 有效（未软删除）记录列表 + CRUD。
 ///
@@ -13,24 +17,74 @@ import '../../settings/application/settings_providers.dart';
 /// 派生 Provider（calcResults/dailySummary）自动重建。
 class ItemsNotifier extends AsyncNotifier<List<Item>> {
   @override
-  Future<List<Item>> build() => _reload();
+  Future<List<Item>> build() async {
+    // 启动时自动清理 30 天前的回收站记录
+    await ref.read(itemRepositoryProvider).purgeDeletedBefore(
+      DateTime.now().subtract(const Duration(days: 30)),
+    );
+    return _reload();
+  }
 
   Future<List<Item>> _reload() =>
       ref.read(itemRepositoryProvider).findAll();
 
+  void _pushOp(UndoableOp op) => ref.read(undoServiceProvider).push(op);
+
   Future<void> addItem(ItemDraft draft) async {
-    await ref.read(itemRepositoryProvider).insert(draft, draft.tags);
+    final repo = ref.read(itemRepositoryProvider);
+    final id = await repo.insert(draft, draft.tags);
     state = AsyncData(await _reload());
+    _pushOp(UndoableOp(
+      description: '新增「${draft.name}」',
+      undo: () async {
+        await repo.softDelete(id);
+        state = AsyncData(await _reload());
+      },
+      redo: () async {
+        await repo.restore(id);
+        state = AsyncData(await _reload());
+      },
+    ));
   }
 
   Future<void> updateItem(Item item) async {
-    await ref.read(itemRepositoryProvider).update(item, item.tags);
+    final repo = ref.read(itemRepositoryProvider);
+    final old = await repo.findById(item.id);
+    await repo.update(item, item.tags);
     state = AsyncData(await _reload());
+    if (old != null) {
+      _pushOp(UndoableOp(
+        description: '修改「${item.name}」',
+        undo: () async {
+          await repo.update(old, old.tags);
+          state = AsyncData(await _reload());
+        },
+        redo: () async {
+          await repo.update(item, item.tags);
+          state = AsyncData(await _reload());
+        },
+      ));
+    }
   }
 
   Future<void> softDelete(int id) async {
-    await ref.read(itemRepositoryProvider).softDelete(id);
+    final repo = ref.read(itemRepositoryProvider);
+    final item = await repo.findById(id);
+    await repo.softDelete(id);
     state = AsyncData(await _reload());
+    if (item != null) {
+      _pushOp(UndoableOp(
+        description: '删除「${item.name}」',
+        undo: () async {
+          await repo.restore(id);
+          state = AsyncData(await _reload());
+        },
+        redo: () async {
+          await repo.softDelete(id);
+          state = AsyncData(await _reload());
+        },
+      ));
+    }
   }
 
   Future<void> restore(int id) async {

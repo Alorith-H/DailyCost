@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/db/schema.dart';
 import '../../../data/providers.dart';
 import '../../../domain/models/app_settings.dart';
 import '../../../domain/models/enums.dart';
@@ -36,6 +37,30 @@ class SettingsNotifier extends Notifier<AppSettings> {
       fxRates: {...state.fxRates, currency: rateToCny},
     );
     await ref.read(settingsRepositoryProvider).setFxRate(currency, rateToCny);
+  }
+
+  Future<void> setNotifyExpiry(bool v) async {
+    state = state.copyWith(notifyExpiry: v);
+    await ref.read(settingsRepositoryProvider)
+        .setNotify(SettingsKeys.notifyExpiry, v);
+  }
+
+  Future<void> setNotifyRenewal(bool v) async {
+    state = state.copyWith(notifyRenewal: v);
+    await ref.read(settingsRepositoryProvider)
+        .setNotify(SettingsKeys.notifyRenewal, v);
+  }
+
+  Future<void> setNotifyWeekly(bool v) async {
+    state = state.copyWith(notifyWeekly: v);
+    await ref.read(settingsRepositoryProvider)
+        .setNotify(SettingsKeys.notifyWeekly, v);
+  }
+
+  Future<void> setNotifyBackup(bool v) async {
+    state = state.copyWith(notifyBackup: v);
+    await ref.read(settingsRepositoryProvider)
+        .setNotify(SettingsKeys.notifyBackup, v);
   }
 }
 
