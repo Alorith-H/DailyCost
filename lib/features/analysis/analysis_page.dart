@@ -667,6 +667,7 @@ class _SubscriptionTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subs = ref.watch(subscriptionItemsProvider);
     final results = ref.watch(calcResultsProvider);
+    final idle = ref.watch(idleItemsProvider).value ?? const <Item>[];
     final theme = Theme.of(context);
 
     return ListView(
@@ -690,6 +691,31 @@ class _SubscriptionTab extends ConsumerWidget {
                   }} × ${it.cycleLength ?? 1}'
                   ' · 日均 ${money(results[it.id]?.dailyCost ?? 0)}'
                   ' · 下次续费 ${dateShort(_nextRenewal(it))}',
+                ),
+              ),
+            ),
+        const SizedBox(height: 24),
+        Text('疑似闲置 / 沉睡订阅（14 天未打卡）', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (idle.isEmpty)
+          const _EmptyHint('没有发现闲置的物品，继续保持打卡就好')
+        else
+          for (final it in idle)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.hotel_outlined),
+                title: Text(it.name),
+                subtitle: Text(
+                  it.calcMode == CalcMode.subscription
+                      ? '沉睡订阅：一直在付钱但没打卡，考虑要不要取消'
+                      : '很久没用了，考虑标记「闲置」或处理掉',
+                ),
+                trailing: TextButton(
+                  onPressed: () => ref
+                      .read(itemsProvider.notifier)
+                      .updateItem(it.copyWith(lifecycle: ItemLifecycle.idle)),
+                  child: const Text('标记闲置'),
                 ),
               ),
             ),
