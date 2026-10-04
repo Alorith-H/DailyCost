@@ -19,6 +19,87 @@ import 'application/import_service.dart';
 final exportServiceProvider = Provider<ExportService>((ref) => ExportService());
 final importServiceProvider = Provider<ImportService>((ref) => ImportService());
 
+// ── 报告聚合 ──────────────────────────────────────────────────────
+
+enum ReportPeriod { all, year, month, week }
+
+enum ReportGroup { monthly, daily }
+
+/// 按时间范围过滤（按购买日期）。
+List<Item> filterByPeriod(List<Item> items, ReportPeriod period) {
+  if (period == ReportPeriod.all) return items;
+  final now = DateTime.now();
+  return items.where((it) {
+    final d = it.purchaseDate;
+    switch (period) {
+      case ReportPeriod.year:
+        return d.year == now.year;
+      case ReportPeriod.month:
+        return d.year == now.year && d.month == now.month;
+      case ReportPeriod.week:
+        final start = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
+        return !d.isBefore(start);
+      case ReportPeriod.all:
+        return true;
+    }
+  }).toList();
+}
+
+/// 聚合分组：月度 → 「yyyy年M月」，日度 → 「M月d日」。
+Map<String, ({double total, int count})> aggregateBy(
+  List<Item> items,
+  ReportGroup group,
+) {
+  final map = <String, ({double total, int count})>{};
+  for (final it in items) {
+    final key = group == ReportGroup.monthly
+        ? '${it.purchaseDate.year}年${it.purchaseDate.month}月'
+        : '${it.purchaseDate.month}月${it.purchaseDate.day}日';
+    final prev = map[key];
+    map[key] = (
+      total: (prev?.total ?? 0) + it.tcoTotal,
+      count: (prev?.count ?? 0) + 1,
+    );
+  }
+  // 按时间顺序排序
+  final keys = map.keys.toList();
+  keys.sort((a, b) {
+    final ra = RegExp(r'\d+')
+        .allMatches(a)
+        .map((m) => int.parse(m.group(0)!))
+        .toList();
+    final rb = RegExp(r'\d+')
+        .allMatches(b)
+        .map((m) => int.parse(m.group(0)!))
+        .toList();
+    for (var i = 0; i < (ra.length < rb.length ? ra.length : rb.length); i++) {
+      if (ra[i] != rb[i]) return ra[i].compareTo(rb[i]);
+    }
+    return 0;
+  });
+  return {for (final k in keys) k: map[k]!};
+}
+
+/// 分类汇总，按花费降序。
+List<MapEntry<String, ({double total, int count})>> categorySummary(
+  List<Item> items,
+) {
+  final map = <String, ({double total, int count})>{};
+  for (final it in items) {
+    final prev = map[it.category];
+    map[it.category] = (
+      total: (prev?.total ?? 0) + it.tcoTotal,
+      count: (prev?.count ?? 0) + 1,
+    );
+  }
+  final list = map.entries.toList();
+  list.sort((a, b) => b.value.total.compareTo(a.value.total));
+  return list;
+}
+
+// ── 数据管理页面 ──────────────────────────────────────────────────
+
 /// 数据管理：导出 / 导入 / 备份 / 恢复 / 撤销重做 / 回收站。
 class DataManagePage extends ConsumerStatefulWidget {
   const DataManagePage({super.key});
@@ -30,6 +111,10 @@ class DataManagePage extends ConsumerStatefulWidget {
 class _DataManagePageState extends ConsumerState<DataManagePage> {
   final _reportKey = GlobalKey();
   var _busy = false;
+
+  // 报告聚合设置
+  var _period = ReportPeriod.all;
+  var _group = ReportGroup.monthly;
 
   Future<void> _run(String label, Future<void> Function() action) async {
     if (_busy) return;
@@ -52,10 +137,14 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
 
   List<Item> get _items => ref.read(itemsProvider).value ?? const [];
 
+  List<Item> get _reportItems => filterByPeriod(_items, _period);
+
+  Map<String, ({double total, int count})> get _aggMap =>
+      aggregateBy(_reportItems, _group);
+
   @override
   Widget build(BuildContext context) {
     final undo = ref.watch(undoServiceProvider);
-    final settings = ref.watch(settingsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('数据管理')),
@@ -63,18 +152,53 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
         padding: const EdgeInsets.all(16),
         children: [
           _section('报告预览（可导出图片 / PDF）'),
+
+          // ── 周期选择（不进导出图）──
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const Text('时间范围', style: TextStyle(fontSize: 13)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SegmentedButton<ReportPeriod>(
+                    segments: const [
+                      ButtonSegment(value: ReportPeriod.all, label: Text('全部', style: TextStyle(fontSize: 11))),
+                      ButtonSegment(value: ReportPeriod.year, label: Text('今年', style: TextStyle(fontSize: 11))),
+                      ButtonSegment(value: ReportPeriod.month, label: Text('本月', style: TextStyle(fontSize: 11))),
+                      ButtonSegment(value: ReportPeriod.week, label: Text('本周', style: TextStyle(fontSize: 11))),
+                    ],
+                    selected: {_period},
+                    onSelectionChanged: (s) => setState(() => _period = s.first),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── 报告卡片（进导出图）──
           RepaintBoundary(
             key: _reportKey,
-            child: _ReportCard(items: _items, coffeeYuan: settings.coffeePriceYuan),
+            child: _ReportCard(
+              items: _reportItems,
+              aggMap: _aggMap,
+              group: _group,
+              periodLabel: switch (_period) {
+                ReportPeriod.all => '全部',
+                ReportPeriod.year => '今年',
+                ReportPeriod.month => '本月',
+                ReportPeriod.week => '本周',
+              },
+            ),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => _run('导出图片', _exportImage),
+                  onPressed: _busy ? null : () => _run('导出图片', _exportImage),
                   icon: const Icon(Icons.image_outlined),
                   label: const Text('导出图片'),
                 ),
@@ -128,7 +252,7 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
             title: const Text('从备份恢复'),
             subtitle: const Text('覆盖当前数据（请先备份）'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: _busy ? null : _restore,
+            onTap: _restore,
           ),
           const SizedBox(height: 24),
           _section('操作记录'),
@@ -199,11 +323,11 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
 
   Future<void> _backup() async {
     final docs = await getApplicationDocumentsDirectory();
-    final path = await ref.read(exportServiceProvider).backupZip(
-      dbPath: p.join(docs.path, 'dailycost.db'),
-      photosDirPath: p.join(docs.path, 'photos'),
-    );
-    await ref.read(exportServiceProvider).shareFile(path, subject: 'DailyCost 备份');
+    final zipPath = await ref.read(exportServiceProvider).backup(
+          dbPath: p.join(docs.path, 'dailycost.db'),
+          photosDirPath: p.join(docs.path, 'photos'),
+        );
+    await ref.read(exportServiceProvider).shareFile(zipPath, subject: 'DailyCost 备份');
   }
 
   Future<void> _restore() async {
@@ -266,17 +390,27 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
   }
 }
 
-/// 报告卡片：汇总 + 明细（导出图片/PDF 的内容）。
+/// 报告卡片：汇总 + 月度/日度汇总 + 分类汇总（导出图片/PDF 的内容）。
 class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.items, required this.coffeeYuan});
+  const _ReportCard({
+    required this.items,
+    required this.aggMap,
+    required this.group,
+    required this.periodLabel,
+  });
 
   final List<Item> items;
-  final double coffeeYuan;
+  final Map<String, ({double total, int count})> aggMap;
+  final ReportGroup group;
+  final String periodLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final totalSpent = items.fold<double>(0, (s, it) => s + it.tcoTotal);
+    final categories = categorySummary(items);
     final now = DateTime.now();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -284,33 +418,47 @@ class _ReportCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('DailyCost · 消费报告', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(dateLong(now), style: theme.textTheme.bodySmall),
-            const Divider(height: 24),
-            Text('共 ${items.length} 条记录', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 12),
-            for (final item in items.take(20))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      money(item.price),
-                      style: theme.textTheme.moneyInline,
-                    ),
-                  ],
+            const SizedBox(height: 4),
+            Text('范围：$periodLabel', style: theme.textTheme.bodySmall),
+            const Divider(height: 20),
+
+            // ── 汇总统计 ──
+            Row(
+              children: [
+                Expanded(child: Text('共 ${items.length} 条记录')),
+                Text(
+                  '总计 ${money(totalSpent)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            if (items.length > 20)
-              Text('…… 共 ${items.length} 条', style: theme.textTheme.bodySmall),
-            const Divider(height: 24),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // ── 月度/日度汇总 ──
+            Text(
+              group == ReportGroup.monthly ? '月度汇总' : '每日汇总',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 6),
+            _headerRow(theme),
+            for (final entry in aggMap.entries)
+              _dataRow(theme, entry.key, entry.value),
+
+            // ── 分类汇总 ──
+            if (categories.isNotEmpty) ...[
+              const Divider(height: 20),
+              Text('分类汇总', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 6),
+              _headerRow(theme),
+              for (final entry in categories.take(8))
+                _dataRow(theme, entry.key, entry.value),
+            ],
+
+            const Divider(height: 20),
             Text(
               '由 DailyCost 生成 · 让每一笔钱被看见',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -322,4 +470,62 @@ class _ReportCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _headerRow(ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(group == ReportGroup.monthly ? '时间' : '分类',
+                  style: theme.textTheme.bodySmall),
+            ),
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text('花费', style: theme.textTheme.bodySmall),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text('条数', style: theme.textTheme.bodySmall),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _dataRow(
+    ThemeData theme,
+    String label,
+    ({double total, int count}) v,
+  ) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(money(v.total), style: theme.textTheme.moneyInline),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text('${v.count}', style: theme.textTheme.bodySmall),
+              ),
+            ),
+          ],
+        ),
+      );
 }
