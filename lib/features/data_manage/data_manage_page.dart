@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/calc/calc_engine.dart';
-import '../../domain/models/calc_result.dart';
+import '../../domain/models/enums.dart';
 import '../../domain/models/item.dart';
 import '../home/application/home_providers.dart';
 import '../settings/application/settings_providers.dart';
@@ -27,68 +27,109 @@ enum ReportPeriod { all, year, month, week }
 
 enum ReportGroup { monthly, daily }
 
-/// 按时间范围过滤（按购买日期）。
-List<Item> filterByPeriod(List<Item> items, ReportPeriod period) {
-  if (period == ReportPeriod.all) return items;
+/// 时间范围内每天的价格均分 → 实际每日花费。
+/// 不是按购买日期过滤，而是"这段时间内正在花钱的商品"。
+DateTime _periodStart(ReportPeriod period) {
   final now = DateTime.now();
-  return items.where((it) {
-    final d = it.purchaseDate;
-    switch (period) {
-      case ReportPeriod.year:
-        return d.year == now.year;
-      case ReportPeriod.month:
-        return d.year == now.year && d.month == now.month;
-      case ReportPeriod.week:
-        final start = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: now.weekday - 1));
-        return !d.isBefore(start);
-      case ReportPeriod.all:
-        return true;
-    }
-  }).toList();
-}
-
-/// 按月/日分组，每组内列出商品明细。
-/// 返回有序的分组列表，每组含标题和商品列表。
-List<({String title, List<Item> items})> groupByTime(
-  List<Item> items,
-  ReportGroup group,
-) {
-  final map = <String, List<Item>>{};
-  for (final it in items) {
-    final key = group == ReportGroup.monthly
-        ? '${it.purchaseDate.year}年${it.purchaseDate.month}月'
-        : '${it.purchaseDate.month}月${it.purchaseDate.day}日';
-    map.putIfAbsent(key, () => []).add(it);
+  switch (period) {
+    case ReportPeriod.week:
+      return DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: now.weekday - 1));
+    case ReportPeriod.month:
+      return DateTime(now.year, now.month, 1);
+    case ReportPeriod.year:
+      return DateTime(now.year, 1, 1);
+    case ReportPeriod.all:
+      // 从最早购买日期开始
+      return DateTime(2000, 1, 1);
   }
-  // 按时间顺序排序
-  final keys = map.keys.toList();
-  keys.sort((a, b) {
-    final ra = RegExp(r'\d+')
-        .allMatches(a)
-        .map((m) => int.parse(m.group(0)!))
-        .toList();
-    final rb = RegExp(r'\d+')
-        .allMatches(b)
-        .map((m) => int.parse(m.group(0)!))
-        .toList();
-    for (var i = 0; i < (ra.length < rb.length ? ra.length : rb.length); i++) {
-      if (ra[i] != rb[i]) return ra[i].compareTo(rb[i]);
-    }
-    return 0;
-  });
-  return [
-    for (final k in keys) (title: k, items: map[k]!),
-  ];
 }
 
-/// 单组小计。
-double _subtotal(List<Item> items) =>
-    items.fold<double>(0, (s, it) => s + it.tcoTotal);
+DateTime _periodEnd(ReportPeriod period) {
+  final now = DateTime.now();
+  switch (period) {
+    case ReportPeriod.week:
+      return DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: now.weekday - 1))
+          .add(const Duration(days: 6));
+    case ReportPeriod.month:
+      return DateTime(now.year, now.month + 1, 0);
+    case ReportPeriod.year:
+      return DateTime(now.year, 12, 31);
+    case ReportPeriod.all:
+      return now;
+  }
+}
+
+/// 每个商品在时间范围内的每日均分累计总额。
+/// 逐日累加 calculate(input, today: day).dailyCost，仅计在用商品。
+({List<({String name, double total, int days})> items, double total, int totalDays})
+    aggregateItemCosts(List<Item> items, ReportPeriod period) {
+  final start = _periodStart(period);
+  final end = _periodEnd(period);
+  final today = DateTime.now();
+  final safeEnd = end.isAfter(today) ? today : end;
+
+  final totals = <String, double>{};
+  final dayCount = <String, int>{};
+  var grandTotal = 0.0;
+  var dayIdx = 0;
+
+  for (var day = DateTime(start.year, start.month, start.day);
+      !day.isAfter(safeEnd);
+      day = day.add(const Duration(days: 1))) {
+    dayIdx++;
+    for (final it in items) {
+      final r = calculate(it.toCalcInputs(), today: day);
+      if (r.status != ItemStatus.inUse) continue;
+      totals[it.name] = (totals[it.name] ?? 0) + r.dailyCost;
+      dayCount[it.name] = (dayCount[it.name] ?? 0) + 1;
+      grandTotal += r.dailyCost;
+    }
+  }
+
+  final list = totals.entries
+      .map((e) => (
+            name: e.key,
+            total: e.value,
+            days: dayCount[e.key] ?? 0,
+          ))
+      .toList()
+    ..sort((a, b) => b.total.compareTo(a.total));
+
+  return (items: list, total: grandTotal, totalDays: dayIdx);
+}
+
+/// 按日聚合：每天总花费 + 各商品明细。
+List<({DateTime date, double total, List<({String name, double cost})> items})>
+    aggregateDailyCosts(List<Item> items, ReportPeriod period) {
+  final start = _periodStart(period);
+  final end = _periodEnd(period);
+  final today = DateTime.now();
+  final safeEnd = end.isAfter(today) ? today : end;
+
+  final result = <({DateTime date, double total, List<({String name, double cost})> items})>[];
+
+  for (var day = DateTime(start.year, start.month, start.day);
+      !day.isAfter(safeEnd);
+      day = day.add(const Duration(days: 1))) {
+    final dayItems = <({String name, double cost})>[];
+    var dayTotal = 0.0;
+    for (final it in items) {
+      final r = calculate(it.toCalcInputs(), today: day);
+      if (r.status != ItemStatus.inUse) continue;
+      dayItems.add((name: it.name, cost: r.dailyCost));
+      dayTotal += r.dailyCost;
+    }
+    if (dayItems.isNotEmpty) {
+      result.add((date: day, total: dayTotal, items: dayItems));
+    }
+  }
+  return result;
+}
 
 // ── 数据管理页面 ──────────────────────────────────────────────────
 
-/// 数据管理：导出 / 导入 / 备份 / 恢复 / 撤销重做 / 回收站。
 class DataManagePage extends ConsumerStatefulWidget {
   const DataManagePage({super.key});
 
@@ -99,8 +140,7 @@ class DataManagePage extends ConsumerStatefulWidget {
 class _DataManagePageState extends ConsumerState<DataManagePage> {
   final _reportKey = GlobalKey();
   var _busy = false;
-
-  var _period = ReportPeriod.all;
+  var _period = ReportPeriod.month;
   var _group = ReportGroup.monthly;
 
   Future<void> _run(String label, Future<void> Function() action) async {
@@ -124,8 +164,6 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
 
   List<Item> get _items => ref.read(itemsProvider).value ?? const [];
 
-  List<Item> get _reportItems => filterByPeriod(_items, _period);
-
   @override
   Widget build(BuildContext context) {
     final undo = ref.watch(undoServiceProvider);
@@ -136,8 +174,6 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
         padding: const EdgeInsets.all(16),
         children: [
           _section('报告预览（可导出图片 / PDF）'),
-
-          // ── 时间范围选择（不进导出图）──
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -161,12 +197,11 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
               ],
             ),
           ),
-
-          // ── 报告卡片（进导出图）──
           RepaintBoundary(
             key: _reportKey,
             child: _ReportCard(
-              items: _reportItems,
+              items: _items,
+              period: _period,
               group: _group,
               periodLabel: switch (_period) {
                 ReportPeriod.all => '全部',
@@ -373,16 +408,19 @@ class _DataManagePageState extends ConsumerState<DataManagePage> {
   }
 }
 
-/// 报告卡片：按月/日分组，每组列出商品明细（导出图片/PDF 的内容）。
+// ── 报告卡片 ──────────────────────────────────────────────────────
+
 class _ReportCard extends StatelessWidget {
   const _ReportCard({
     required this.items,
+    required this.period,
     required this.group,
     required this.periodLabel,
     required this.onGroupChanged,
   });
 
   final List<Item> items;
+  final ReportPeriod period;
   final ReportGroup group;
   final String periodLabel;
   final ValueChanged<ReportGroup> onGroupChanged;
@@ -390,8 +428,7 @@ class _ReportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final totalSpent = items.fold<double>(0, (s, it) => s + it.tcoTotal);
-    final groups = groupByTime(items, group);
+    final agg = aggregateItemCosts(items, period);
     final now = DateTime.now();
 
     return Card(
@@ -404,36 +441,36 @@ class _ReportCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(dateLong(now), style: theme.textTheme.bodySmall),
             const SizedBox(height: 4),
-            Text('范围：$periodLabel', style: theme.textTheme.bodySmall),
+            Text('范围：$periodLabel · ${agg.totalDays} 天', style: theme.textTheme.bodySmall),
             const Divider(height: 16),
 
-            // ── 汇总 ──
+            // ── 总计 ──
             Row(
               children: [
-                Text('共 ${items.length} 条记录'),
+                Text('每日均分累计'),
                 const Spacer(),
                 Text(
-                  '总计 ${money(totalSpent)}',
+                  money(agg.total),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             // ── 分组切换 ──
             Row(
               children: [
                 Text(
-                  group == ReportGroup.monthly ? '按月查看' : '按日查看',
+                  group == ReportGroup.monthly ? '按商品汇总' : '按日明细',
                   style: theme.textTheme.titleSmall,
                 ),
                 const Spacer(),
                 SegmentedButton<ReportGroup>(
                   segments: const [
-                    ButtonSegment(value: ReportGroup.monthly, label: Text('月度', style: TextStyle(fontSize: 11))),
-                    ButtonSegment(value: ReportGroup.daily, label: Text('日度', style: TextStyle(fontSize: 11))),
+                    ButtonSegment(value: ReportGroup.monthly, label: Text('汇总', style: TextStyle(fontSize: 11))),
+                    ButtonSegment(value: ReportGroup.daily, label: Text('每日', style: TextStyle(fontSize: 11))),
                   ],
                   selected: {group},
                   onSelectionChanged: (s) => onGroupChanged(s.first),
@@ -444,28 +481,10 @@ class _ReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // ── 分组明细 ──
-            for (final g in groups) ...[
-              // 分组标题 + 小计
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                child: Row(
-                  children: [
-                    Text(g.title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    Text(
-                      '${money(_subtotal(g.items))}  ·  ${g.items.length} 条',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              // 该组商品明细
-              for (final it in g.items)
-                _ItemRow(item: it),
-            ],
+            if (group == ReportGroup.monthly)
+              _buildItemSummary(theme, agg)
+            else
+              _buildDailyDetail(theme, items, period),
 
             const Divider(height: 16),
             Text(
@@ -479,78 +498,101 @@ class _ReportCard extends StatelessWidget {
       ),
     );
   }
-}
 
-/// 单条商品明细行（主页卡片那些数据：价格/残值/已用天数/日均）。
-class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.item});
-
-  final Item item;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final result = calculate(item.toCalcInputs());
-    final elapsed = result.elapsedDays.toInt();
-
-    // 价格行：TCO 或 总价 + 残值
-    final costLabel = item.extraCostsTotal > 0
-        ? 'TCO ${money(item.tcoTotal)}'
-        : '总价 ${money(item.price)}';
-    final residualLabel = '残值 ${money(item.residual)}';
-
-    // 使用天数文案
-    final String usageLabel;
-    if (result.totalDays != null) {
-      usageLabel = '已用 $elapsed/${result.totalDays!.toInt()} 天';
-    } else {
-      usageLabel = '已使用 $elapsed 天';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 第一行：商品名 + 分类
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
+  /// 按商品汇总：每件商品在时间段内的累计日均花费。
+  Widget _buildItemSummary(
+    ThemeData theme,
+    ({List<({String name, double total, int days})> items, double total, int totalDays}) agg,
+  ) {
+    return Column(
+      children: [
+        // 表头
+        Row(
+          children: [
+            Expanded(flex: 3, child: Text('商品', style: theme.textTheme.bodySmall)),
+            Expanded(flex: 2, child: Align(
+              alignment: Alignment.centerRight,
+              child: Text('天数', style: theme.textTheme.bodySmall),
+            )),
+            Expanded(flex: 3, child: Align(
+              alignment: Alignment.centerRight,
+              child: Text('累计花费', style: theme.textTheme.bodySmall),
+            )),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (final e in agg.items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
-              ),
-              Text(item.category, style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
-            ],
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('${e.days}', style: theme.textTheme.bodySmall),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(money(e.total), style: theme.textTheme.moneyInline),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 2),
-          // 第二行：价格 + 残值 + 日均
-          Row(
-            children: [
-              Text(costLabel, style: theme.textTheme.bodySmall),
-              const SizedBox(width: 8),
-              Text(residualLabel, style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
-              const Spacer(),
-              Text(
-                '${money(result.dailyCost)}/天',
-                style: theme.textTheme.moneyInline,
-              ),
-            ],
+      ],
+    );
+  }
+
+  /// 按日明细：每天各商品的日均花费。
+  Widget _buildDailyDetail(ThemeData theme, List<Item> items, ReportPeriod period) {
+    final daily = aggregateDailyCosts(items, period);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final day in daily) ...[
+          // 日期 + 当日总计
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            child: Row(
+              children: [
+                Text(
+                  '${day.date.month}月${day.date.day}日',
+                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                Text(
+                  '${money(day.total)}  ·  ${day.items.length} 项',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 2),
-          // 第三行：已用天数
-          Text(usageLabel, style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          )),
+          // 各商品明细
+          for (final item in day.items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall),
+                  ),
+                  Text(money(item.cost), style: theme.textTheme.moneyInline?.copyWith(fontSize: 11)),
+                ],
+              ),
+            ),
         ],
-      ),
+      ],
     );
   }
 }
