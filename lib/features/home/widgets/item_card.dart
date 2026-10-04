@@ -22,6 +22,19 @@ class ItemCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
+  /// 价格行文案：TCO/分期/币种信息优先。
+  String get _costLabel {
+    final buffer = StringBuffer();
+    buffer.write(
+      item.extraCostsTotal > 0
+          ? 'TCO ${money(item.tcoTotal)}'
+          : '总价 ${money(item.price)}',
+    );
+    buffer.write(' · 残值 ${money(item.residual)}');
+    if (item.currency != 'CNY') buffer.write(' · ${item.currency}');
+    return buffer.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -68,10 +81,13 @@ class ItemCard extends StatelessWidget {
                     style: theme.textTheme.moneyMedium,
                   ),
                   const Spacer(),
-                  Text(
-                    '总价 ${money(item.price)} · 残值 ${money(item.residual)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  Flexible(
+                    child: Text(
+                      _costLabel,
+                      textAlign: TextAlign.right,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],

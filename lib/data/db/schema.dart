@@ -1,7 +1,9 @@
-/// SQLite schema DDL 与种子数据。schemaVersion = 1。
+/// SQLite schema DDL 与种子数据。schemaVersion = 2。
+///
+/// v2: item_costs 表（TCO 附加成本）；items 增列 apr/installment/currency/photos。
 library;
 
-const int schemaVersion = 1;
+const int schemaVersion = 2;
 
 /// 建表语句（按依赖顺序执行）。
 const List<String> schemaSql = [
@@ -24,6 +26,10 @@ CREATE TABLE items (
   calc_mode      TEXT    NOT NULL,
   depreciation   TEXT    NOT NULL DEFAULT 'straightLine',
   note           TEXT    NOT NULL DEFAULT '',
+  apr_percent    REAL,
+  installment_months INTEGER,
+  currency       TEXT    NOT NULL DEFAULT 'CNY',
+  photos         TEXT    NOT NULL DEFAULT '[]',
   created_at     TEXT    NOT NULL,
   updated_at     TEXT    NOT NULL,
   deleted_at     TEXT
@@ -53,16 +59,51 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 )
 ''',
+  '''
+CREATE TABLE item_costs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id    INTEGER NOT NULL,
+  category   TEXT    NOT NULL DEFAULT '其他',
+  amount_fen INTEGER NOT NULL CHECK (amount_fen >= 0),
+  note       TEXT    NOT NULL DEFAULT '',
+  created_at TEXT    NOT NULL,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+)
+''',
+  'CREATE INDEX idx_item_costs_item ON item_costs(item_id)',
+];
+
+/// v2 迁移语句（对 v1 库逐条执行）。
+const List<String> migrationV1ToV2 = [
+  "ALTER TABLE items ADD COLUMN apr_percent REAL",
+  "ALTER TABLE items ADD COLUMN installment_months INTEGER",
+  "ALTER TABLE items ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'",
+  "ALTER TABLE items ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'",
+  '''
+CREATE TABLE item_costs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id    INTEGER NOT NULL,
+  category   TEXT    NOT NULL DEFAULT '其他',
+  amount_fen INTEGER NOT NULL CHECK (amount_fen >= 0),
+  note       TEXT    NOT NULL DEFAULT '',
+  created_at TEXT    NOT NULL,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+)
+''',
+  'CREATE INDEX idx_item_costs_item ON item_costs(item_id)',
 ];
 
 /// settings 种子行。
 const Map<String, String> settingsSeed = {
   'theme_mode': 'system',
   'coffee_price_fen': '1500',
+  'auto_update_check': '1',
 };
 
 /// settings 键名常量。
 abstract final class SettingsKeys {
   static const themeMode = 'theme_mode';
   static const coffeePriceFen = 'coffee_price_fen';
+  static const autoUpdateCheck = 'auto_update_check';
+  static const fxRates = 'fx_rates';
 }

@@ -39,6 +39,8 @@ enum CalcIssueField {
   totalHours,
   hoursPerDay,
   cycleLength,
+  installmentMonths,
+  aprPercent,
 }
 
 /// 问题级别：error 阻断保存，warning 仅提示。
@@ -60,6 +62,49 @@ class CalcIssue {
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
 double _clamp01(double x) => x.clamp(0.0, 1.0);
+
+/// 等额本息还款计划。
+class InstallmentPlan {
+  const InstallmentPlan({
+    required this.monthlyPayment,
+    required this.totalInterest,
+    required this.totalPaid,
+  });
+
+  /// 月供（元）
+  final double monthlyPayment;
+
+  /// 利息总额（元）
+  final double totalInterest;
+
+  /// 连本带息总还款（元）
+  final double totalPaid;
+}
+
+/// 等额本息：月供 = P×r×(1+r)^n / ((1+r)^n - 1)；r=0 时均摊本金。
+/// [aprPercent] 为年利率百分数；[months] <= 0 钳为 1。
+InstallmentPlan installmentPlan({
+  required double principal,
+  required double aprPercent,
+  required int months,
+}) {
+  final p = math.max(0.0, principal);
+  final n = math.max(1, months);
+  final r = math.max(0.0, aprPercent) / 100.0 / 12.0;
+  final double monthly;
+  if (r == 0) {
+    monthly = p / n;
+  } else {
+    final pow = math.pow(1 + r, n).toDouble();
+    monthly = p * r * pow / (pow - 1);
+  }
+  final totalPaid = monthly * n;
+  return InstallmentPlan(
+    monthlyPayment: monthly,
+    totalInterest: totalPaid - p,
+    totalPaid: totalPaid,
+  );
+}
 
 /// 剩余价值曲线（有限 N 模式）。
 ///
@@ -105,7 +150,25 @@ CalcResult calculate(CalcInputs input, {DateTime? today}) {
   final purchase = _dateOnly(input.purchaseDate);
 
   final price = math.max(0.0, input.price);
-  final residual = input.residual.clamp(0.0, price);
+
+  // 分期：日均基数换成含利息总还款额（订阅模式不支持分期）；
+  // TCO 附加成本并入总成本。残值钳制在 [0, 总成本]，总额永不出负数。
+  double effectiveCost = price;
+  double? monthlyPayment;
+  double? totalInterest;
+  final months = input.installmentMonths ?? 0;
+  if (months > 0 && input.mode != CalcMode.subscription) {
+    final plan = installmentPlan(
+      principal: price,
+      aprPercent: input.aprPercent ?? 0,
+      months: months,
+    );
+    effectiveCost = plan.totalPaid;
+    monthlyPayment = plan.monthlyPayment;
+    totalInterest = plan.totalInterest;
+  }
+  effectiveCost += math.max(0.0, input.tcoExtra);
+  final residual = input.residual.clamp(0.0, effectiveCost);
 
   // 含购买日的已用天数；购买日之前为 0
   final rawElapsed = now.difference(purchase).inDays + 1;
@@ -123,7 +186,7 @@ CalcResult calculate(CalcInputs input, {DateTime? today}) {
     case CalcMode.fixedDays:
       final n = math.max(1, input.usageDays ?? 1).toDouble();
       totalDays = n;
-      daily = (price - residual) / n;
+      daily = (effectiveCost - residual) / n;
 
     case CalcMode.endDate:
       final end = input.endDate;
@@ -131,31 +194,31 @@ CalcResult calculate(CalcInputs input, {DateTime? today}) {
       final span = end == null ? 1 : end.difference(purchase).inDays + 1;
       final n = math.max(1, span).toDouble();
       totalDays = n;
-      daily = (price - residual) / n;
+      daily = (effectiveCost - residual) / n;
 
     case CalcMode.subscription:
       final cycleDays =
           cycleDaysFor(input.cycleUnit ?? CycleUnit.monthly, input.cycleLength ?? 1)
               .toDouble();
       totalDays = cycleDays;
-      daily = price / cycleDays;
+      daily = effectiveCost / cycleDays;
 
     case CalcMode.actualDays:
       final effectiveDays = math.max(1, rawElapsed).toDouble();
-      daily = (price - residual) / effectiveDays;
+      daily = (effectiveCost - residual) / effectiveDays;
       totalDays = null;
 
     case CalcMode.perUse:
       final uses = math.max(1, input.totalUses ?? 1).toDouble();
       final perDay = math.max(0.0, input.usesPerDay ?? 0.0);
-      costPerUse = (price - residual) / uses;
+      costPerUse = (effectiveCost - residual) / uses;
       daily = costPerUse * perDay;
       totalDays = perDay > 0 ? uses / perDay : null;
 
     case CalcMode.perHour:
       final hours = math.max(1, input.totalHours ?? 1).toDouble();
       final perDay = math.max(0.0, input.hoursPerDay ?? 0.0);
-      costPerHour = (price - residual) / hours;
+      costPerHour = (effectiveCost - residual) / hours;
       daily = costPerHour * perDay;
       totalDays = perDay > 0 ? hours / perDay : null;
   }
@@ -176,6 +239,9 @@ CalcResult calculate(CalcInputs input, {DateTime? today}) {
       costPerUse: costPerUse,
       costPerHour: costPerHour,
       status: status,
+      totalCost: effectiveCost,
+      monthlyPayment: monthlyPayment,
+      totalInterest: totalInterest,
     );
   }
 
@@ -221,6 +287,9 @@ CalcResult calculate(CalcInputs input, {DateTime? today}) {
     costPerUse: costPerUse,
     costPerHour: costPerHour,
     status: status,
+    totalCost: effectiveCost,
+    monthlyPayment: monthlyPayment,
+    totalInterest: totalInterest,
   );
 }
 
@@ -279,6 +348,27 @@ List<CalcIssue> validateInputs(CalcInputs input, {DateTime? today}) {
     issues.add(const CalcIssue(
       field: CalcIssueField.residual,
       messageZh: '残值不应高于价格',
+      severity: CalcIssueSeverity.warning,
+    ));
+  }
+
+  final months = input.installmentMonths ?? 0;
+  if (months < 0 || (months == 0 && input.aprPercent != null)) {
+    issues.add(const CalcIssue(
+      field: CalcIssueField.installmentMonths,
+      messageZh: '分期期数须大于 0',
+    ));
+  }
+  if ((input.aprPercent ?? 0) < 0) {
+    issues.add(const CalcIssue(
+      field: CalcIssueField.aprPercent,
+      messageZh: '利率不能为负',
+    ));
+  }
+  if (months > 0 && input.mode == CalcMode.subscription) {
+    issues.add(const CalcIssue(
+      field: CalcIssueField.installmentMonths,
+      messageZh: '订阅周期不支持分期，已按周期费用计算',
       severity: CalcIssueSeverity.warning,
     ));
   }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:daily_cost/domain/calc/calc_engine.dart';
 import 'package:daily_cost/domain/models/calc_inputs.dart';
 import 'package:daily_cost/domain/models/enums.dart';
@@ -8,6 +10,9 @@ void main() {
   CalcInputs input({
     double price = 300,
     double residual = 30,
+    double tcoExtra = 0,
+    double? aprPercent,
+    int? installmentMonths,
     CalcMode mode = CalcMode.fixedDays,
     DepreciationMethod depreciation = DepreciationMethod.straightLine,
     DateTime? purchaseDate,
@@ -22,6 +27,9 @@ void main() {
   }) => CalcInputs(
     price: price,
     residual: residual,
+    tcoExtra: tcoExtra,
+    aprPercent: aprPercent,
+    installmentMonths: installmentMonths,
     mode: mode,
     depreciation: depreciation,
     purchaseDate: purchaseDate ?? purchase,
@@ -480,6 +488,129 @@ void main() {
       expect(
         totalDailyCost(items, today: today),
         closeTo(summarize(items, today: today).todayTotal, 0.0001),
+      );
+    });
+  });
+
+  group('分期与 TCO', () {
+    test('等额本息：零利率均摊', () {
+      final plan = installmentPlan(principal: 1200, aprPercent: 0, months: 12);
+      expect(plan.monthlyPayment, closeTo(100, 0.001));
+      expect(plan.totalInterest, closeTo(0, 0.001));
+      expect(plan.totalPaid, closeTo(1200, 0.001));
+    });
+
+    test('等额本息：12%/12 期公式对照', () {
+      // monthly = P×r×(1+r)^n/((1+r)^n-1)，r=0.01、n=12
+      final plan = installmentPlan(principal: 12000, aprPercent: 12, months: 12);
+      final r = 0.01;
+      final pow = math.pow(1 + r, 12).toDouble();
+      final expectedMonthly = 12000 * r * pow / (pow - 1);
+      expect(plan.monthlyPayment, closeTo(expectedMonthly, 0.001));
+      expect(plan.totalPaid, closeTo(expectedMonthly * 12, 0.001));
+      expect(plan.totalInterest, closeTo(expectedMonthly * 12 - 12000, 0.001));
+      expect(plan.monthlyPayment, closeTo(1066.185, 0.01));
+    });
+
+    test('期数 <= 0 钳为 1；负利率按 0 处理', () {
+      final plan = installmentPlan(principal: 600, aprPercent: -5, months: 0);
+      expect(plan.monthlyPayment, closeTo(600, 0.001));
+      expect(plan.totalPaid, closeTo(600, 0.001));
+    });
+
+    test('分期改变日均基数为总还款额', () {
+      // 1200 全款分 12 期零利率 → 总额仍 1200，残值 0，120 天 → 日均 10
+      final zeroApr = calculate(
+        input(
+          price: 1200,
+          residual: 0,
+          usageDays: 120,
+          installmentMonths: 12,
+          aprPercent: 0,
+        ),
+        today: DateTime(2026, 10, 15),
+      );
+      expect(zeroApr.dailyCost, closeTo(10, 0.001));
+      expect(zeroApr.monthlyPayment, closeTo(100, 0.001));
+      expect(zeroApr.totalInterest, closeTo(0, 0.001));
+
+      // 带利息：总额 ≈ 1392.73 → 日均 ≈ 11.6
+      final withInterest = calculate(
+        input(
+          price: 1200,
+          residual: 0,
+          usageDays: 120,
+          installmentMonths: 12,
+          aprPercent: 12,
+        ),
+        today: DateTime(2026, 10, 15),
+      );
+      final plan = installmentPlan(principal: 1200, aprPercent: 12, months: 12);
+      expect(withInterest.totalCost, closeTo(plan.totalPaid, 0.001));
+      expect(withInterest.dailyCost, closeTo(plan.totalPaid / 120, 0.001));
+    });
+
+    test('TCO 附加成本并入日均', () {
+      // 300 价格 + 60 维护 - 30 残值 = 330 / 30 天 = 11
+      final r = calculate(
+        input(price: 300, residual: 30, usageDays: 30, tcoExtra: 60),
+        today: DateTime(2026, 10, 15),
+      );
+      expect(r.dailyCost, closeTo(11, 0.001));
+      expect(r.totalCost, closeTo(360, 0.001));
+    });
+
+    test('分期 + TCO 同时生效', () {
+      final plan = installmentPlan(principal: 1200, aprPercent: 12, months: 12);
+      final r = calculate(
+        input(
+          price: 1200,
+          residual: 0,
+          usageDays: 365,
+          installmentMonths: 12,
+          aprPercent: 12,
+          tcoExtra: 100,
+        ),
+        today: DateTime(2026, 10, 15),
+      );
+      expect(r.totalCost, closeTo(plan.totalPaid + 100, 0.001));
+      expect(r.dailyCost, closeTo((plan.totalPaid + 100) / 365, 0.001));
+    });
+
+    test('订阅模式忽略分期但仍计 TCO', () {
+      final r = calculate(
+        input(
+          price: 300,
+          residual: 0,
+          mode: CalcMode.subscription,
+          usageDays: null,
+          cycleUnit: CycleUnit.monthly,
+          cycleLength: 1,
+          installmentMonths: 12,
+          aprPercent: 12,
+          tcoExtra: 30,
+        ),
+        today: DateTime(2026, 10, 15),
+      );
+      expect(r.dailyCost, closeTo(330 / 30, 0.001));
+      expect(r.monthlyPayment, isNull);
+    });
+
+    test('validateInputs：分期与订阅冲突给出警告', () {
+      final issues = validateInputs(
+        input(
+          price: 300,
+          mode: CalcMode.subscription,
+          usageDays: null,
+          cycleUnit: CycleUnit.monthly,
+          cycleLength: 1,
+          installmentMonths: 6,
+          aprPercent: 10,
+        ),
+      );
+      expect(
+        issues.map((e) => e.messageZh),
+        contains('订阅周期不支持分期，已按周期费用计算'),
       );
     });
   });

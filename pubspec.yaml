@@ -42,7 +42,10 @@ dependencies:
   path: ^1.9.1
   flutter_localizations:
     sdk: flutter
-
+  device_info_plus: ^13.3.0
+  flutter_secure_storage: ^11.2.0
+  sqflite_sqlcipher: ^3.4.1
+  image_picker: ^1.2.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

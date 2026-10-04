@@ -11,6 +11,9 @@ class CalcResult {
     required this.costPerUse,
     required this.costPerHour,
     required this.status,
+    required this.totalCost,
+    this.monthlyPayment,
+    this.totalInterest,
   });
 
   /// 日均成本（元/天，>= 0，已规范化）
@@ -36,4 +39,13 @@ class CalcResult {
 
   /// 状态
   final ItemStatus status;
+
+  /// 计入 TCO 与分期利息后的总成本（元）
+  final double totalCost;
+
+  /// 分期月供（仅分期时有值）
+  final double? monthlyPayment;
+
+  /// 分期利息总额（仅分期时有值）
+  final double? totalInterest;
 }

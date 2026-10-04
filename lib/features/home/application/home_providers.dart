@@ -5,6 +5,7 @@ import '../../../domain/calc/calc_engine.dart';
 import '../../../domain/models/calc_result.dart';
 import '../../../domain/models/daily_summary.dart';
 import '../../../domain/models/item.dart';
+import '../../settings/application/settings_providers.dart';
 
 /// 有效（未软删除）记录列表 + CRUD。
 ///
@@ -41,12 +42,17 @@ class ItemsNotifier extends AsyncNotifier<List<Item>> {
 final itemsProvider =
     AsyncNotifierProvider<ItemsNotifier, List<Item>>(ItemsNotifier.new);
 
-/// 每条记录的计算结果（按 id 索引）。
+/// 每条记录的计算结果（按 id 索引，金额已折算人民币）。
 final calcResultsProvider = Provider<Map<int, CalcResult>>((ref) {
   final items = ref.watch(itemsProvider).value ?? const <Item>[];
   final today = ref.watch(todayProvider);
+  final rates = ref.watch(fxRatesProvider);
   return {
-    for (final item in items) item.id: calculate(item.toCalcInputs(), today: today),
+    for (final item in items)
+      item.id: calculate(
+        item.toCalcInputs(fxRate: rates[item.currency] ?? 1.0),
+        today: today,
+      ),
   };
 });
 
@@ -54,8 +60,9 @@ final calcResultsProvider = Provider<Map<int, CalcResult>>((ref) {
 final dailySummaryProvider = Provider<DailySummary>((ref) {
   final items = ref.watch(itemsProvider).value ?? const <Item>[];
   final today = ref.watch(todayProvider);
+  final rates = ref.watch(fxRatesProvider);
   return summarize(
-    items.map((e) => e.toCalcInputs()),
+    items.map((e) => e.toCalcInputs(fxRate: rates[e.currency] ?? 1.0)),
     today: today,
   );
 });

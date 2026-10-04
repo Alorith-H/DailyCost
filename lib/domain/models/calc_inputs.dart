@@ -1,6 +1,6 @@
 import 'enums.dart';
 
-/// 计价引擎的输入。所有金额单位为元；日期仅含年月日。
+/// 计价引擎的输入。所有金额单位为元（调用方负责按汇率折算）；日期仅含年月日。
 ///
 /// 模式专属字段只在对应模式下有意义，其余模式忽略。
 class CalcInputs {
@@ -10,6 +10,9 @@ class CalcInputs {
     required this.mode,
     required this.depreciation,
     required this.purchaseDate,
+    this.tcoExtra = 0,
+    this.aprPercent,
+    this.installmentMonths,
     this.endDate,
     this.usageDays,
     this.totalUses,
@@ -25,6 +28,15 @@ class CalcInputs {
 
   /// 残值（元）
   final double residual;
+
+  /// TCO 附加成本合计（维护/能耗/保险/配件，元）
+  final double tcoExtra;
+
+  /// 分期年利率（%），与 [installmentMonths] 同时生效
+  final double? aprPercent;
+
+  /// 分期期数（月）；> 0 时日均按「含利息总还款额」计算
+  final int? installmentMonths;
 
   /// 计价模式
   final CalcMode mode;

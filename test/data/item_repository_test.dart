@@ -2,6 +2,7 @@ import 'package:daily_cost/data/db/app_database.dart';
 import 'package:daily_cost/data/repositories/item_repository.dart';
 import 'package:daily_cost/domain/models/enums.dart';
 import 'package:daily_cost/domain/models/item.dart';
+import 'package:daily_cost/domain/models/item_cost.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_db.dart';
@@ -163,5 +164,77 @@ void main() {
     expect(item.usageDays, isNull);
     expect(item.endDate, isNull);
     expect(item.cycleUnit, isNull);
+  });
+
+  test('TCO 成本 / 分期 / 币种 / 照片 往返与更新', () async {
+    final id = await repo.insert(
+      ItemDraft(
+        name: '游戏本',
+        price: 8000,
+        residual: 2000,
+        category: '数码',
+        purchaseDate: purchase,
+        currency: 'USD',
+        aprPercent: 6.5,
+        installmentMonths: 24,
+        usageDays: 365,
+        calcMode: CalcMode.fixedDays,
+        depreciation: DepreciationMethod.straightLine,
+        note: '',
+        tags: const [],
+        photos: const ['/a/b.jpg', '/c/d.jpg'],
+        extraCosts: const [
+          ItemCostDraft(category: '维护', amount: 299, note: '延保'),
+          ItemCostDraft(category: '配件', amount: 199.5, note: '鼠标'),
+        ],
+      ),
+      const [],
+    );
+
+    var item = (await repo.findById(id))!;
+    expect(item.currency, 'USD');
+    expect(item.aprPercent, closeTo(6.5, 0.001));
+    expect(item.installmentMonths, 24);
+    expect(item.photos, ['/a/b.jpg', '/c/d.jpg']);
+    expect(item.extraCosts, hasLength(2));
+    expect(item.extraCostsTotal, closeTo(498.5, 0.001));
+    expect(item.tcoTotal, closeTo(8498.5, 0.001));
+
+    // 更新：成本替换（旧的删掉）、照片清空、分期取消
+    await repo.update(
+      item.copyWith(
+        aprPercent: null,
+        installmentMonths: null,
+        photos: const [],
+        extraCosts: [
+          ItemCost(
+            id: 0,
+            itemId: id,
+            category: '能耗',
+            amount: 66,
+            note: '电费',
+            createdAt: DateTime.now(),
+          ),
+        ],
+      ),
+      const [],
+    );
+    item = (await repo.findById(id))!;
+    expect(item.aprPercent, isNull);
+    expect(item.installmentMonths, isNull);
+    expect(item.photos, isEmpty);
+    expect(item.extraCosts, hasLength(1));
+    expect(item.extraCosts.first.category, '能耗');
+    expect(item.extraCostsTotal, closeTo(66, 0.001));
+  });
+
+  test('purgeDeletedBefore 硬删除过期回收站记录', () async {
+    final id = await repo.insert(draft(), const []);
+    await repo.softDelete(id);
+    expect(await repo.findAll(includeDeleted: true), hasLength(1));
+
+    await repo.purgeDeletedBefore(DateTime.now().add(const Duration(days: 1)));
+    expect(await repo.findAll(includeDeleted: true), isEmpty);
+    expect(await repo.findById(id), isNull);
   });
 }

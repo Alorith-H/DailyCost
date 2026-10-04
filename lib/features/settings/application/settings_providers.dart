@@ -25,6 +25,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(coffeePriceFen: fen);
     await ref.read(settingsRepositoryProvider).setCoffeePriceFen(fen);
   }
+
+  Future<void> setAutoUpdateCheck(bool enabled) async {
+    state = state.copyWith(autoUpdateCheck: enabled);
+    await ref.read(settingsRepositoryProvider).setAutoUpdateCheck(enabled);
+  }
+
+  Future<void> setFxRate(String currency, double rateToCny) async {
+    state = state.copyWith(
+      fxRates: {...state.fxRates, currency: rateToCny},
+    );
+    await ref.read(settingsRepositoryProvider).setFxRate(currency, rateToCny);
+  }
 }
 
 final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
@@ -43,4 +55,9 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
 /// 咖啡单价（元），供试算器对比。
 final coffeePriceProvider = Provider<double>(
   (ref) => ref.watch(settingsProvider).coffeePriceYuan,
+);
+
+/// 离线汇率表（1 外币 → 人民币）。
+final fxRatesProvider = Provider<Map<String, double>>(
+  (ref) => ref.watch(settingsProvider).fxRates,
 );
