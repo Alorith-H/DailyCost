@@ -11,7 +11,6 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/calc/calc_engine.dart';
-import '../../domain/models/calc_inputs.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/item.dart';
 import '../home/application/home_providers.dart';

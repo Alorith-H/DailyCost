@@ -4,48 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('lifecycle_engine', () {
-    test('使用率与值不值评分', () {
-      expect(usageRate(checkinDays: 15), closeTo(0.5, 0.001));
-      expect(usageRate(checkinDays: 40), 1.0); // 超出窗口封顶
-      expect(worthScore(checkinDays: 15), closeTo(50, 0.001));
-    });
-
-    test('后悔指数：贵且不用 → 高；常用 → 低', () {
-      final regretful = regretIndex(
-        dailyCost: 15,
-        coffeePriceYuan: 15,
-        checkinDays: 0,
-      );
-      final loved = regretIndex(
-        dailyCost: 15,
-        coffeePriceYuan: 15,
-        checkinDays: 30,
-      );
-      expect(regretful, closeTo(100, 0.001));
-      expect(loved, closeTo(0, 0.001));
-    });
-
-    test('闲置检测与冷静期', () {
+    test('冷静期', () {
       final today = DateTime(2026, 10, 15);
-      expect(
-        isLikelyIdle(lastCheckIn: null, today: today),
-        isTrue,
-      );
-      expect(
-        isLikelyIdle(
-          lastCheckIn: DateTime(2026, 10, 1),
-          today: today,
-        ),
-        isTrue,
-      );
-      expect(
-        isLikelyIdle(
-          lastCheckIn: DateTime(2026, 10, 10),
-          today: today,
-        ),
-        isFalse,
-      );
-
       expect(
         cooldownDaysLeft(
           cooldownUntil: DateTime(2026, 10, 18),

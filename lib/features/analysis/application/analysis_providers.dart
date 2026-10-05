@@ -7,7 +7,6 @@ import '../../../domain/models/enums.dart';
 import '../../../domain/models/item.dart';
 import '../../budget/application/budget_engine.dart';
 import '../../home/application/home_providers.dart';
-import '../../lifecycle/application/lifecycle_engine.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../stats/application/stats_engine.dart';
 
@@ -64,21 +63,6 @@ final subscriptionItemsProvider = Provider<List<Item>>((ref) {
     for (final it in items)
       if (it.calcMode == CalcMode.subscription) it,
   ];
-});
-
-/// 疑似闲置 / 沉睡订阅：连续 14 天无打卡的持有中物品（含订阅）。
-final idleItemsProvider = FutureProvider<List<Item>>((ref) async {
-  final items = ref.watch(activeItemsProvider);
-  final repo = ref.watch(checkinRepositoryProvider);
-  final today = ref.watch(todayProvider);
-  final result = <Item>[];
-  for (final it in items) {
-    final last = await repo.lastCheckIn(it.id);
-    if (isLikelyIdle(lastCheckIn: last, today: today)) {
-      result.add(it);
-    }
-  }
-  return result;
 });
 
 /// 预算 CRUD 状态。

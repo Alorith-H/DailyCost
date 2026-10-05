@@ -15,14 +15,12 @@ class ItemCard extends StatelessWidget {
     required this.result,
     required this.onTap,
     required this.onDelete,
-    required this.onCheckIn,
   });
 
   final Item item;
   final CalcResult result;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-  final VoidCallback onCheckIn;
 
   /// 价格行文案：TCO/分期/币种信息优先。
   String get _costLabel {
@@ -69,11 +67,6 @@ class ItemCard extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 4),
                       child: _LifecycleBadge(item.lifecycle),
                     ),
-                  IconButton(
-                    tooltip: '今日打卡',
-                    icon: const Icon(Icons.check_circle_outline, size: 20),
-                    onPressed: onCheckIn,
-                  ),
                   PopupMenuButton<String>(
                     onSelected: (v) {
                       if (v == 'delete') onDelete();

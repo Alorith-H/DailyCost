@@ -109,7 +109,6 @@ class _HomePageState extends ConsumerState<HomePage>
                   result: results[item.id]!,
                   onTap: () => _onEdit(item),
                   onDelete: () => _onDelete(item),
-                  onCheckIn: () => _onCheckIn(item),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -124,19 +123,6 @@ class _HomePageState extends ConsumerState<HomePage>
 
   void _onEdit(Item item) =>
       context.pushNamed('itemEdit', pathParameters: {'id': '${item.id}'});
-
-  Future<void> _onCheckIn(Item item) async {
-    final isNew = await ref
-        .read(checkinRepositoryProvider)
-        .checkIn(item.id, DateTime.now());
-    ref.invalidate(checkinInfoProvider);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(isNew ? '已打卡「${item.name}」' : '今天已经打过卡了'),
-      ),
-    );
-  }
 
   Future<void> _onDelete(Item item) async {
     await ref.read(itemsProvider.notifier).softDelete(item.id);

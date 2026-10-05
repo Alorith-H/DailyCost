@@ -138,21 +138,3 @@ final dailySummaryProvider = Provider<DailySummary>((ref) {
     today: today,
   );
 });
-
-/// 某物品的打卡情况（近 30 天天数 + 最近打卡日）。
-class CheckinInfo {
-  const CheckinInfo({required this.days30, required this.lastCheckIn});
-
-  final int days30;
-  final DateTime? lastCheckIn;
-}
-
-final checkinInfoProvider =
-    FutureProvider.family<CheckinInfo, int>((ref, itemId) async {
-  final repo = ref.watch(checkinRepositoryProvider);
-  final since = DateTime.now().subtract(const Duration(days: 30));
-  return CheckinInfo(
-    days30: await repo.countSince(itemId, since),
-    lastCheckIn: await repo.lastCheckIn(itemId),
-  );
-});
